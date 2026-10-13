@@ -1,0 +1,12 @@
+{
+  "name": "safewatch-dashboard-deployment",
+  "private": true,
+  "version": "1.0.0",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build": "npm --prefix apps/dashboard-admin run build",
+    "dev": "npm --prefix apps/dashboard-admin run dev"
+  }
+}

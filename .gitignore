@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dev-dist/
+.vercel/
+.env
+.env.*
+!.env.example
+*.local
+*.log
+.run-logs/
+.tools/
+outputs/
+hardware/**/.pio/
+__pycache__/
+*.pyc
+.DS_Store
