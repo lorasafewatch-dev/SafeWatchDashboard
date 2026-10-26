@@ -1,5 +1,13 @@
 # Login, recovery and barangay approval
 
+**Current security update (27 October 2026):** Follow
+[Security hardening](SECURITY_HARDENING.md) for the latest migrations and rollout.
+Families now request barangay approval for each additional watch, staff require
+authenticator enrollment/AAL2, and automatic reserved-email administrator signup
+is disabled. Existing family links and the ability to monitor multiple seniors
+are preserved. The older first-admin and direct-linking descriptions below refer
+to the October 13 baseline, not the current rollout.
+
 The family app runs at `http://localhost:5173`; the barangay dashboard runs at
 `http://localhost:5174`. Both offer login, signup and password recovery. Accounts
 belong to one app and need different email addresses when a person uses both.

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { accountSecurityError, verifyAuthenticator } from '../accountSecurity.js';
+import AccountAuthenticator from './AccountAuthenticator.jsx';
 
 export default function AccountMfaGate({ client, access, error, onVerified }) {
   const factors = access?.factors.filter(factor => factor.factor_type === 'totp') || [];
@@ -17,7 +18,7 @@ export default function AccountMfaGate({ client, access, error, onVerified }) {
   return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
     <section className="w-full max-w-md bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-5">
       <h1 className="text-2xl font-bold text-slate-800">{access ? 'Two-factor verification' : 'Check your account'}</h1>
-      {access ? <>
+      {access?.enrollmentRequired ? <AccountAuthenticator client={client} user={access.user} required onUpdated={onVerified} /> : access ? <>
         <p className="text-sm text-slate-600">Enter the current 6-digit code from your authenticator to continue.</p>
         {factors.length ? <form onSubmit={event => { event.preventDefault(); run(async () => {
           await verifyAuthenticator(client, factorId, code, access.user.id); setCode(''); onVerified();

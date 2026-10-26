@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { installRecoveryListener } from '../../shared/authFlow.js';
+import { installPrivateCacheCleanup } from '../../shared/privateCache.js';
 
 let client;
 export function getDashboardClient() {
@@ -7,6 +8,7 @@ export function getDashboardClient() {
     client = createClient(import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co',
       import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key');
     installRecoveryListener(client);
+    installPrivateCacheCleanup(client, 'dashboard');
   }
   return client;
 }

@@ -58,12 +58,13 @@ export default function useAccountSession(client, app) {
   const roleAllowed = accountCanUseApp(state.permission,app);
   const matches = accountMatchesApp(state.permission,app);
   const recoveryAccess = state.recovery && (!state.access || matches) ? {user:state.access?.user,recovery:state.recovery} : null;
-  const needsMfa = state.access && !state.access.allowed && (roleAllowed || matches && state.recovery?.valid);
-  return { isLoadingAuth: state.loading, isLoggedIn: !!state.access?.allowed && roleAllowed && !state.recovery && !state.linkError,
+  const enrollmentRequired = !!state.access && matches && state.permission?.requested_app === 'dashboard' && !state.access.factors.length;
+  const needsMfa = state.access && (!state.access.allowed || enrollmentRequired) && (roleAllowed || matches && state.recovery?.valid);
+  return { isLoadingAuth: state.loading, isLoggedIn: !!state.access?.allowed && !enrollmentRequired && roleAllowed && !state.recovery && !state.linkError,
     userId: state.access?.user.id || null, accountUser: state.access?.user,
     accountPermission:state.permission, recoveryAccess,recoveryLink:state.recoveryLink,
     accessDenied:state.access && !roleAllowed && !(matches && state.recovery) ? state.permission : null,
-    pendingAccess:needsMfa ? state.access : null,
+    pendingAccess:needsMfa ? { ...state.access, enrollmentRequired } : null,
     authLinkError:state.linkError, authNotice:notice, setAuthNotice:setNotice,
     authError: state.error, retryAuth: () => setRevision(value => value + 1) };
 }

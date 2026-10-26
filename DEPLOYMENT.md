@@ -1,7 +1,19 @@
 # Deploy both apps to Vercel
 
+For the 27 October security update, also follow
+[Security hardening](SECURITY_HARDENING.md). Apply the family-approval migration,
+deploy both apps with the enrollment/review screens, then enable the staff-MFA
+database requirement. Gateway cutover requires matching provisioned firmware and
+must be scheduled separately to keep monitoring available.
+
 Create two Vercel projects, one per app. Each receives a separate HTTPS URL and
 uses the same existing Supabase database. The frontends need no local backend.
+
+The Heltec receiver keeps posting directly to the existing Supabase telemetry
+endpoint through Wi-Fi. Its endpoint is not a Vercel frontend address. Receiver
+firmware must use plain minimal-response INSERT with private history policies.
+Run `supabase/migrations/20261013_gateway_retry_probe.sql` to enable its verified
+duplicate-safe retry capability; ordinary uploads work without this read-only RPC.
 
 ## Separate prepared packages
 

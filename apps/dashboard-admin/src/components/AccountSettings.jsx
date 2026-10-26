@@ -4,6 +4,8 @@ import { familyProfileFromUser, saveFamilyProfile } from '../../../shared/family
 import { accountSecurityError, changeAccountPassword, sendPasswordSecurityCode, verifiedFactors } from '../../../shared/accountSecurity.js';
 import {accountRoleLabel} from '../../../shared/accountAccess.js';
 import AccountAccessManager from './AccountAccessManager.jsx';
+import FamilyAccessManager from './FamilyAccessManager.jsx';
+import AccountAuthenticator from '../../../shared/components/AccountAuthenticator.jsx';
 
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 focus:outline-2 focus:outline-emerald-500 disabled:opacity-50';
 const primaryClass = 'rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50';
@@ -79,6 +81,7 @@ export default function AccountSettings({ client, user: accountUser, permission,
       <div className="flex items-center gap-5"><div className="p-4 bg-emerald-50 text-emerald-600 rounded-3xl"><Shield className="w-8 h-8" /></div><div><h3 id="account-security-title" className="text-xl font-bold text-slate-800">Account Security</h3><p className="mt-1 text-sm text-slate-500">Manage your password and account security.</p></div></div>
       <Notice error={securityError} message={securityMessage} />
       <div><Row label="Last sign-in" value={user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'Not available'} /><Row label="Two-Factor Authentication" value={factors.length ? 'On' : 'Off'} /></div>
+      <AccountAuthenticator client={client} user={user} required onUpdated={onUpdated} />
 
       {passwordOpen ? <form onSubmit={event => { event.preventDefault(); run('password', async () => {
         const nextUser = await changeAccountPassword(client, passwordDraft, user.id, verifyCurrentPassword);
@@ -95,6 +98,7 @@ export default function AccountSettings({ client, user: accountUser, permission,
       </form> : <button disabled={!!busy} onClick={() => { setPasswordOpen(true); setSecurityError(''); setSecurityMessage(''); }} className={`${secondaryClass} w-full border-emerald-500 text-emerald-700`}>Change Password</button>}
       {busy && <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> Updating your account…</p>}
     </section>
+    <div className="lg:col-span-2"><FamilyAccessManager client={client}/></div>
     {permission?.role==='super_admin'&&<div className="lg:col-span-2"><AccountAccessManager client={client} userId={user.id} onUpdated={onUpdated}/></div>}
   </div>;
 }

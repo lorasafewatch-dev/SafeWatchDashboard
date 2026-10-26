@@ -28,16 +28,51 @@ export async function loadFamilySeniors(client, userId) {
     .map(row => seniorDetails(row.devices));
 }
 
-export async function loadRegisteredSeniors(client) {
-  const { data, error } = await client.from('devices').select('id, patient_name, device_name, age, gender')
-    .neq('patient_name', '[HIDDEN]').order('patient_name', { ascending: true }).limit(1000);
+export async function loadFamilyRequests(client) {
+  const { data, error } = await client.from('safewatch_family_requests')
+    .select('id, device_id, kind, requested_name, status, created_at').order('created_at', { ascending: false }).limit(100);
   if (error) throw error;
-  return (data || []).map(seniorDetails);
+  return data || [];
+}
+
+export async function cancelFamilyRequest(client, requestId) {
+  const { data, error } = await client.rpc('cancel_family_senior_request', { p_request_id: requestId });
+  if (error) throw error;
+  if (data !== true) throw new Error('This request has already changed. Refresh the list.');
+}
+
+export async function listFamilyRequestsForStaff(client) {
+  const { data, error } = await client.rpc('list_family_senior_requests');
+  if (error) throw error;
+  if (!Array.isArray(data)) throw new Error('Family access requests could not be verified.');
+  return data;
+}
+
+export async function reviewFamilyRequest(client, requestId, decision) {
+  if (!['approve', 'reject'].includes(decision)) throw new Error('Choose approve or reject.');
+  const { data, error } = await client.rpc('review_family_senior_request', { p_request_id: requestId, p_decision: decision });
+  if (error) throw error;
+  if (String(data?.id) !== String(requestId) || data.status !== (decision === 'approve' ? 'approved' : 'rejected')) {
+    throw new Error('The access decision could not be verified. Refresh the list.');
+  }
+  return data;
+}
+
+export async function listFamilyLinksForStaff(client) {
+  const { data, error } = await client.rpc('list_family_senior_links');
+  if (error) throw error;
+  if (!Array.isArray(data)) throw new Error('Family links could not be verified.');
+  return data;
+}
+export async function revokeFamilyAccess(client, userId, deviceId) {
+  const { data, error } = await client.rpc('revoke_family_senior_access', { p_user_id: userId, p_device_id: deviceId });
+  if (error) throw error;
+  if (data !== true) throw new Error('The access link has already changed. Refresh the list.');
 }
 
 export async function linkFamilySenior(client, watchId) {
   const id = normalizeWatchId(watchId);
-  const { data, error } = await client.rpc('link_family_senior', { p_device_id: id });
+  const { data, error } = await client.rpc('request_family_senior_access', { p_device_id: id });
   if (error) throw error;
   if (data !== id) throw new Error('The senior link could not be verified. Please refresh your list.');
   return id;
@@ -51,7 +86,7 @@ export async function registerFamilySenior(client, draft) {
   if (age !== null && (!Number.isInteger(age) || age < 0 || age > 130)) throw new Error('Enter an age from 0 to 130, or leave it blank.');
   const gender = draft.gender || 'Not specified';
   if (!['Male','Female','Other','Not specified'].includes(gender)) throw new Error('Choose a valid gender.');
-  const { data, error } = await client.rpc('register_family_senior', { p_device_id: id, p_name: name, p_age: age, p_gender: gender });
+  const { data, error } = await client.rpc('request_family_senior_registration', { p_device_id: id, p_name: name, p_age: age, p_gender: gender });
   if (error) throw error;
   if (data !== id) throw new Error('The registration could not be verified. Please refresh your list.');
   return id;

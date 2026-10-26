@@ -6,14 +6,16 @@ import { SAN_ISIDRO_EAST_BOUNDARY, isInsidePolygon } from '../../shared/safeZone
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import {
-  LayoutDashboard,
-  Users,
-  MapPin,
-  HeartPulse,
-  Bell,
-  ShieldAlert,
-  Settings,
+import { SENIOR_AVATAR } from '../../shared/avatar.js';
+import { createSeniorMarker } from '../../shared/mapMarker.js';
+import { 
+  LayoutDashboard, 
+  Users, 
+  MapPin, 
+  HeartPulse, 
+  Bell, 
+  ShieldAlert, 
+  Settings, 
   HelpCircle,
   Search,
   Filter,
@@ -67,19 +69,9 @@ const MapController = ({ center, zoom, trigger, bounds }) => {
 };
 
 // Custom Marker Creator
-const createCustomIcon = (name, type = 'normal') => {
-  const color = type === 'trusted' ? 'bg-blue-500' : 'bg-emerald-500';
-  const border = type === 'trusted' ? 'border-blue-500' : 'border-emerald-500';
-
+const createCustomIcon = (_name, type = 'normal') => {
   return L.divIcon({
-    html: `
-      <div class="relative w-12 h-12">
-        <div class="w-12 h-12 rounded-full border-4 ${border} bg-white overflow-hidden shadow-lg">
-          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=${name}" class="w-full h-full" />
-        </div>
-        <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-4 ${color} rotate-45 border-r border-b border-white shadow-md"></div>
-      </div>
-    `,
+    html: createSeniorMarker({ trusted: type === 'trusted', pointer: true }),
     className: '',
     iconSize: [48, 48],
     iconAnchor: [24, 48],
@@ -256,14 +248,14 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   const timeStr = liveTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const dateStr = liveTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
+  
   const [trustedLocations, setTrustedLocations] = useState([
     { id: 1, name: "Relative's House", lat: 14.044, lng: 121.132, radius: 100, label: "Trusted Zone" }
   ]);
 
   const handleSaveLocation = () => {
     if (!newLocation.name || !newLocation.lat) return;
-
+    
     const newHub = {
       id: Date.now(),
       name: newLocation.name,
@@ -272,7 +264,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       radius: newLocation.radius,
       label: "Trusted Zone"
     };
-
+    
     setTrustedLocations([...trustedLocations, newHub]);
     setIsAddingLocationDetails(false);
     setNewLocation({ name: '', lat: '', lng: '', radius: 30 });
@@ -301,11 +293,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         const view = new DataView(bytes.buffer);
         return view.getFloat64(0, true);
       };
-
+      
       const type = parseInt(hex.slice(2, 10), 16);
       const hasSrid = (type & 0x20000000) !== 0;
       const coordOffset = hasSrid ? 18 * 2 : 9 * 2;
-
+      
       const lng = readDoubleLE(hex, coordOffset);
       const lat = readDoubleLE(hex, coordOffset + 16);
       return { lat, lng };
@@ -515,9 +507,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     // Check every 10 seconds so we can auto-escalate alerts that cross the 3-min threshold
     const timer = setInterval(() => {
       setLiveTime(new Date());
-      fetchAlerts();
+      fetchAlerts(); 
     }, 10000);
-
+    
     // Initial fetch
     fetchSeniors();
     fetchAlerts();
@@ -593,7 +585,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     const totalSeniors = seniors.length.toString();
     const safeSeniorsCount = seniors.filter(s => s.type === 'normal' || s.type === 'trusted').length.toString().padStart(2, '0');
     const activeAlertsCount = visibleAlerts.length.toString().padStart(2, '0');
-
+    
     const allVitalsNormal = seniors.length === 0 || seniors.every(s => s.spo2 >= 95 && s.pulse >= 60 && s.pulse <= 100);
     const healthStatusStr = allVitalsNormal ? "Good" : "Warning";
     const healthStatusColor = allVitalsNormal ? "text-[#4a7c59]" : "text-orange-600";
@@ -670,7 +662,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     </span>
                   )}
                 </div>
-                <button
+                <button 
                   data-confirm-alert disabled={confirmingAlerts}
                   onClick={handleDismissAllDB}
                   className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
@@ -690,7 +682,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 ) : (
                   sosAlerts.filter(a => !dismissedAlerts.has(a.id)).map(alert => (
                     <div key={alert.id} className={`p-4 rounded-xl border ${
-                      alert.rawType === 'SOS' ? 'border-red-200 bg-red-50/50' :
+                      alert.rawType === 'SOS' ? 'border-red-200 bg-red-50/50' : 
                       alert.rawType === 'GEOFENCE' ? 'border-orange-200 bg-orange-50/50' :
                       'border-yellow-200 bg-yellow-50/50'
                     }`}>
@@ -705,15 +697,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </div>
                       <p className="text-sm font-semibold text-gray-800 mb-1">{alert.seniorName}</p>
                       <p className="text-xs text-gray-400 mb-3">
-                        {alert.rawType === 'SOS' ? '🔴 SOS button pressed — immediate attention required!' :
+                        {alert.rawType === 'SOS' ? '🔴 SOS button pressed — immediate attention required!' : 
                          '📍 Senior moved outside the safe zone boundary'}
                       </p>
                       <div className="flex gap-2">
-                        <button
+                        <button 
                           onClick={() => setSelectedAlert(alert)}
                           className="btn-outline !py-1.5 !px-3 !text-xs flex-1"
                         >View Details</button>
-                        <button
+                        <button 
                           data-confirm-alert disabled={confirmingAlerts}
                           onClick={() => handleDismissAlertDB(alert)}
                           className="btn-outline !py-1.5 !px-3 !text-xs flex-1 !text-gray-400 hover:!text-red-500"
@@ -748,7 +740,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <tr key={senior.id} className="hover:bg-[#f7f9f4]/50 transition-colors">
                       <td className="table-cell">
                         <div className="flex items-center gap-3">
-                          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${senior.name}`} className="w-9 h-9 rounded-full bg-[#f7f9f4]" alt={senior.name} />
+                          <img src={SENIOR_AVATAR} className="w-9 h-9 rounded-full bg-[#f7f9f4]" alt={senior.name} />
                           <div>
                             <p className="font-semibold text-gray-800 text-sm">{senior.name}</p>
                             <p className="text-[10px] text-gray-400">{senior.age}y • {senior.gender}</p>
@@ -816,7 +808,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <Filter className="w-4 h-4" />
                   Filter
                 </button>
-                <button
+                <button 
                   onClick={() => setIsAddingSenior(true)}
                   className="btn-primary flex items-center gap-2"
                 >
@@ -846,7 +838,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <tr key={senior.id} className="hover:bg-[#f7f9f4]/50 transition-colors">
                       <td className="table-cell text-sm">
                         <div className="flex items-center gap-3">
-                          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${senior.name}`} className="w-9 h-9 rounded-full bg-[#f7f9f4]" alt={senior.name} />
+                          <img src={SENIOR_AVATAR} className="w-9 h-9 rounded-full bg-[#f7f9f4]" alt={senior.name} />
                           <div>
                             <p className="font-semibold text-gray-800">{senior.name}</p>
                             <p className="text-[10px] text-gray-400">ID: {senior.phone}</p>
@@ -915,13 +907,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
             <div className="flex-1 overflow-y-auto space-y-3 pb-4">
               {seniors.map(senior => (
-                <div
-                  key={senior.id}
+                <div 
+                  key={senior.id} 
                   onClick={() => setSelectedSeniorLoc([senior.lat, senior.lng])}
                   className="bg-white/80 backdrop-blur-xl p-4 rounded-2xl shadow-sm border border-white cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group"
                 >
                   <div className="flex items-center gap-3 mb-3">
-                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${senior.name}`} className="w-10 h-10 rounded-full bg-slate-100" />
+                    <img src={SENIOR_AVATAR} className="w-10 h-10 rounded-full bg-slate-100" />
                     <div>
                       <p className="font-bold text-slate-800 text-sm group-hover:text-[#4a7c59] transition-colors">{senior.name}</p>
                       <p className="text-[10px] text-slate-400 font-semibold uppercase">{senior.status}</p>
@@ -955,7 +947,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <Popup className="premium-popup">
                     <div className="text-slate-800 p-2 min-w-[150px]">
                       <div className="flex items-center gap-3 mb-2">
-                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${senior.name}`} className="w-8 h-8 rounded-full" />
+                        <img src={SENIOR_AVATAR} className="w-8 h-8 rounded-full" />
                         <div>
                           <p className="font-bold leading-tight">{senior.name}</p>
                           <p className="text-[10px] font-bold text-[#4a7c59] uppercase">{senior.status}</p>
@@ -968,7 +960,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               ))}
               <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
             </MapContainer>
-
+            
             {/* Map Floating UI */}
             <div className="absolute top-6 right-6 z-[1000] flex flex-col gap-2">
               <button className="w-10 h-10 bg-white/90 backdrop-blur rounded-xl shadow-lg border border-white flex items-center justify-center text-slate-600 hover:text-[#4a7c59] transition-colors"><Plus className="w-5 h-5" /></button>
@@ -1009,7 +1001,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <tr key={senior.id} className="hover:bg-slate-50/30 transition-colors">
                       <td className="table-cell">
                         <div className="flex items-center gap-3">
-                          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${senior.name}`} className="w-10 h-10 rounded-full" />
+                          <img src={SENIOR_AVATAR} className="w-10 h-10 rounded-full" />
                           <span className="font-bold text-slate-800">{senior.name}</span>
                         </div>
                       </td>
@@ -1085,7 +1077,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <tr key={alert.id} className="hover:bg-slate-50/30 transition-colors">
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-4">
-                          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${alert.seniorName}`} className="w-14 h-14 rounded-full bg-slate-100" />
+                          <img src={SENIOR_AVATAR} className="w-14 h-14 rounded-full bg-slate-100" />
                           <div>
                             <p className="font-bold text-slate-800 text-base">{alert.seniorName}</p>
                             <p className="text-xs text-slate-400 font-bold tracking-wider">ID: {alert.seniorId}</p>
@@ -1131,7 +1123,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <div className="p-6 border-b border-slate-50">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-bold text-slate-800">Active Zones</h3>
-                  <button
+                  <button 
                     onClick={() => {
                       setNewLocation({ name: '', lat: '', lng: '', radius: 30 });
                       setIsPickingLocation(true);
@@ -1170,9 +1162,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
                 {/* Additional Trusted Hubs */}
                 {trustedLocations.map(loc => (
-                  <div
-                    key={loc.id}
-                    onClick={() => { setGeofenceCenter([loc.lat, loc.lng]); setGeofenceCenterTrigger(prev => prev + 1); }}
+                  <div 
+                    key={loc.id} 
+                    onClick={() => { setGeofenceCenter([loc.lat, loc.lng]); setGeofenceCenterTrigger(prev => prev + 1); }} 
                     className="p-5 rounded-3xl border border-slate-100 bg-white flex items-center justify-between cursor-pointer group hover:border-blue-200 transition-all shadow-sm"
                   >
                     <div className="flex items-center gap-4">
@@ -1186,10 +1178,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="px-2.5 py-1 bg-blue-50 text-blue-600 text-[9px] font-black uppercase rounded-lg">Trusted Hub</span>
-                      <button
-                         onClick={(e) => {
-                           e.stopPropagation();
-                           setTrustedLocations(prev => prev.filter(l => l.id !== loc.id));
+                      <button 
+                         onClick={(e) => { 
+                           e.stopPropagation(); 
+                           setTrustedLocations(prev => prev.filter(l => l.id !== loc.id)); 
                          }}
                          className="p-1.5 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-lg transition-colors"
                          title="Remove Safe Hub"
@@ -1209,15 +1201,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <MapController center={geofenceCenter} zoom={17} trigger={geofenceCenterTrigger} bounds={sanIsidroEastGeofence} />
                 <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
                 <LocationPicker />
-
+                
                 {/* Show all saved trusted locations */}
                 {trustedLocations.map(loc => (
                   <React.Fragment key={loc.id}>
                     <Marker position={[loc.lat, loc.lng]} icon={createCustomIcon(loc.name, 'trusted')} />
-                    <Circle
-                      center={[loc.lat, loc.lng]}
-                      radius={loc.radius}
-                      pathOptions={{ color: '#4a7c59', fillColor: '#4a7c59', fillOpacity: 0.15, weight: 2, dashArray: '5, 10' }}
+                    <Circle 
+                      center={[loc.lat, loc.lng]} 
+                      radius={loc.radius} 
+                      pathOptions={{ color: '#4a7c59', fillColor: '#4a7c59', fillOpacity: 0.15, weight: 2, dashArray: '5, 10' }} 
                     />
                   </React.Fragment>
                 ))}
@@ -1226,18 +1218,18 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 {newLocation.lat && newLocation.lng && (
                   <>
                     <Marker position={[newLocation.lat, newLocation.lng]} />
-                    <Circle
-                      center={[newLocation.lat, newLocation.lng]}
-                      radius={newLocation.radius}
+                    <Circle 
+                      center={[newLocation.lat, newLocation.lng]} 
+                      radius={newLocation.radius} 
                       pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.2 }}
                     />
                   </>
                 )}
               </MapContainer>
-
+              
               {/* Map Style Toggle */}
               <div className="absolute top-6 left-6 z-[1000]">
-                <button
+                <button 
                   onClick={() => setMapStyle(prev => prev === 'standard' ? 'satellite' : 'standard')}
                   className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-lg border border-white text-[10px] font-black uppercase tracking-widest text-slate-700 hover:text-[#4a7c59] transition-all flex items-center gap-2"
                 >
@@ -1253,7 +1245,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     {newLocation.lat ? 'Location selected. You can drag or click again.' : 'Tap anywhere on the map to place the hub.'}
                   </div>
                   {newLocation.lat && (
-                    <button
+                    <button 
                       onClick={() => {
                         setIsPickingLocation(false);
                         setIsAddingLocationDetails(true);
@@ -1266,7 +1258,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </div>
               )}
               {isPickingLocation && (
-                 <button
+                 <button 
                   onClick={() => setIsPickingLocation(false)}
                   className="absolute top-6 right-6 z-[1000] w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors"
                 >
@@ -1285,7 +1277,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 max-w-2xl">
             <h3 className="text-2xl font-bold text-slate-800 mb-2">Contact Support</h3>
             <p className="text-sm text-slate-400 font-medium mb-10">Need more help? Our support team is ready to assist you.</p>
-
+            
             <div className="space-y-8 mb-10">
               <div className="flex items-center gap-6">
                 <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
@@ -1423,12 +1415,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             <div className="p-10 grid grid-cols-2 gap-8 overflow-y-auto">
               <div className="space-y-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Juan Dela Cruz"
+                <input 
+                  type="text" 
+                  placeholder="e.g. Juan Dela Cruz" 
                   value={registerName}
                   onChange={(e) => setRegisterName(e.target.value)}
-                  className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold"
+                  className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold" 
                 />
               </div>
               <div className="space-y-4">
@@ -1436,28 +1428,28 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Device / Watch ID</label>
                   <span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">Check Watch Settings</span>
                 </div>
-                <input
-                  type="text"
-                  placeholder="e.g. 00000000-0000-0000-0000-a0f262e10c94"
+                <input 
+                  type="text" 
+                  placeholder="e.g. 00000000-0000-0000-0000-a0f262e10c94" 
                   value={registerDeviceId}
                   onChange={(e) => setRegisterDeviceId(e.target.value)}
-                  className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold text-xs"
+                  className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold text-xs" 
                 />
                 <p className="text-[9px] text-gray-400 font-bold ml-1 leading-tight">Find this ID on your smartwatch screen: Swipe to settings grid, tap the purple "SYSTEM" icon, and copy the "Watch ID" listed there.</p>
               </div>
               <div className="space-y-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Age</label>
-                <input
-                  type="number"
-                  placeholder="70"
+                <input 
+                  type="number" 
+                  placeholder="70" 
                   value={registerAge}
                   onChange={(e) => setRegisterAge(parseInt(e.target.value))}
-                  className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold"
+                  className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold" 
                 />
               </div>
               <div className="space-y-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Gender</label>
-                <select
+                <select 
                   value={registerGender}
                   onChange={(e) => setRegisterGender(e.target.value)}
                   className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold text-slate-600"
@@ -1467,7 +1459,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </select>
               </div>
               <div className="col-span-2 space-y-4 pt-4">
-                <button
+                <button 
                   onClick={handleRegisterSenior}
                   className="w-full py-5 bg-[#4a7c59] text-white font-bold rounded-2xl shadow-lg hover:bg-[#3d6a4a] transition-all text-sm"
                 >
@@ -1498,15 +1490,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             <div className="p-7 space-y-6">
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Location Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Relative's House"
+                <input 
+                  type="text" 
+                  placeholder="e.g. Relative's House" 
                   value={newLocation.name}
                   onChange={(e) => setNewLocation({ ...newLocation, name: e.target.value })}
-                  className="w-full px-5 py-3.5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-sm"
+                  className="w-full px-5 py-3.5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-sm" 
                 />
               </div>
-
+              
               <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 flex items-center gap-3">
                  <div className="w-10 h-10 bg-white text-blue-500 rounded-xl flex items-center justify-center shadow-sm shrink-0">
                     <MapPin className="w-4 h-4" />
@@ -1522,10 +1514,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Safe Radius: <span className="text-blue-600">{newLocation.radius}m</span></label>
                   <span className="text-[9px] font-bold text-slate-400 uppercase">Coverage</span>
                 </div>
-                <input
-                  type="range"
-                  min="10"
-                  max="200"
+                <input 
+                  type="range" 
+                  min="10" 
+                  max="200" 
                   step="5"
                   value={newLocation.radius}
                   onChange={(e) => setNewLocation({ ...newLocation, radius: parseInt(e.target.value) })}
@@ -1538,7 +1530,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </div>
               </div>
 
-              <button
+              <button 
                 onClick={handleSaveLocation}
                 className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 mt-2"
               >
@@ -1572,13 +1564,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </button>
               </div>
             </div>
-
+            
             {/* Content */}
             <div className="p-6 space-y-6">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Senior Details</p>
                 <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl">
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedAlert.seniorName}`} className="w-12 h-12 rounded-full bg-white shadow-sm border border-slate-200" alt={selectedAlert.seniorName} />
+                  <img src={SENIOR_AVATAR} className="w-12 h-12 rounded-full bg-white shadow-sm border border-slate-200" alt={selectedAlert.seniorName} />
                   <div>
                     <p className="font-bold text-slate-800 text-lg">{selectedAlert.seniorName}</p>
                     <p className="text-xs font-medium text-slate-500">Watch ID: {selectedAlert.deviceId}</p>
@@ -1589,7 +1581,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Alert Description</p>
                 <p className="text-sm font-medium text-slate-700 bg-slate-50 p-4 rounded-2xl">
-                  {selectedAlert.rawType === 'SOS'
+                  {selectedAlert.rawType === 'SOS' 
                     ? `An SOS alert was triggered manually by ${selectedAlert.seniorName} from their SafeWatch device. Immediate assistance may be required.`
                     : `${selectedAlert.seniorName} has moved outside the designated San Isidro East safe zone boundary.`
                   }
@@ -1597,13 +1589,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button
+                <button 
                   onClick={() => setSelectedAlert(null)}
                   className="flex-1 py-3.5 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-colors text-sm"
                 >
                   Close
                 </button>
-                <button
+                <button 
                   data-confirm-alert disabled={confirmingAlerts}
                   onClick={() => handleDismissAlertDB(selectedAlert)}
                   className={`flex-1 py-3.5 text-white font-bold rounded-2xl transition-colors shadow-lg text-sm ${
