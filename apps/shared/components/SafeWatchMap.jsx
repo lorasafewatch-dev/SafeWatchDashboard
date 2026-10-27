@@ -6,6 +6,13 @@ import { EMPTY_MAP_TILE, MAP_LAYERS } from '../mapTiles.js';
 function MapSizeSync() {
   const map = useMap();
   useEffect(() => {
+    // Keep provider credits readable inside the rounded map corners.
+    const credits = map.attributionControl?.getContainer();
+    if (credits) {
+      credits.style.margin = '0 20px 8px';
+      credits.style.maxWidth = 'calc(100% - 40px)';
+      credits.parentElement.style.maxWidth = '100%';
+    }
     let frame;
     const resize = () => {
       cancelAnimationFrame(frame);
