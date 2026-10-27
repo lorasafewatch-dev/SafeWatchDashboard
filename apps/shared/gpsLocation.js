@@ -53,6 +53,13 @@ export function isLiveFamilyLocation(senior, now = Date.now()) {
   return !!senior.latestHasGpsFix && isCurrentGpsPoint(senior.position, senior.positionAt, now);
 }
 
+// Expire a dashboard fix even if a failed refresh leaves the previous row in memory.
+export function dashboardLocationAt(senior, now = Date.now()) {
+  if (!senior.hasGpsLock || isCurrentGpsPoint({lat:senior.lat,lng:senior.lng}, senior.positionAt, now)) return senior;
+  return {...senior, hasGpsLock:false, type:senior.isSOS?'sos':'waiting',
+    status:senior.isSOS?'SOS ALERT!':'No current GPS fix', location:'No current GPS fix'};
+}
+
 export function locationAge(timestamp, now = Date.now()) {
   const age = now - Date.parse(timestamp);
   if (!Number.isFinite(age)) return 'Unknown';

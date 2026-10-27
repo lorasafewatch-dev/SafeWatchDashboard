@@ -7,7 +7,7 @@ import { validateDeploymentEnv } from '../shared/deploymentEnv.js'
 export default defineConfig(({ command, mode }) => {
   if (command === 'build') validateDeploymentEnv(loadEnv(mode, process.cwd(), 'VITE_'));
   return {
-    resolve: { dedupe: ['react', 'react-dom'] },
+    resolve: { dedupe: ['react', 'react-dom', 'leaflet', 'react-leaflet'] },
     plugins: [react(), tailwindcss()],
     server: {
       port: 5174,

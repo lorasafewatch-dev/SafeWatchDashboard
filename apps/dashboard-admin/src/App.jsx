@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { isCurrentGpsPoint, telemetryTimestamp } from '../../shared/gpsStatus.js';
+import { dashboardLocationAt, parseGpsPoint } from '../../shared/gpsLocation.js';
+import { MapNavigation, SafeWatchTiles } from '../../shared/components/SafeWatchMap.jsx';
 import { ALERT_QUERY_FILTER, acknowledgeIncident, confirmationErrorMessage, groupAlertIncidents, needsBarangayAttention } from '../../shared/alertLifecycle.js';
 import { enableAlertSounds, playAlertSound, stopAlertSounds } from '../../shared/alertSound.js';
 import { SAN_ISIDRO_EAST_BOUNDARY, isInsidePolygon } from '../../shared/safeZone.js';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { SENIOR_AVATAR } from '../../shared/avatar.js';
@@ -71,7 +73,7 @@ const MapController = ({ center, zoom, trigger, bounds }) => {
 // Custom Marker Creator
 const createCustomIcon = (_name, type = 'normal') => {
   return L.divIcon({
-    html: createSeniorMarker({ trusted: type === 'trusted', pointer: true }),
+    html: createSeniorMarker({ trusted: type === 'trusted', live: type !== 'waiting', inside: !['outside', 'sos'].includes(type), pointer: true }),
     className: '',
     iconSize: [48, 48],
     iconAnchor: [24, 48],
@@ -98,7 +100,7 @@ const SidebarItem = ({ icon: Icon, label, active, badge, onClick }) => (
 const PolygonWithLegend = ({ positions, name }) => (
   <>
     <Polygon positions={positions} pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.1, weight: 2 }} />
-    <div className="absolute bottom-6 left-6 z-[1000] bg-white px-4 py-2 rounded-xl shadow-lg border border-slate-50 flex items-center gap-2">
+    <div className="absolute bottom-8 left-4 z-[1000] pointer-events-none bg-white px-4 py-2 rounded-xl shadow-lg border border-slate-50 flex items-center gap-2">
       <div className="w-2.5 h-2.5 bg-blue-500 rounded-full"></div>
       <span className="text-[10px] font-bold text-slate-500">{name}</span>
     </div>
@@ -129,6 +131,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [geofenceCenter, setGeofenceCenter] = useState(null);
   const [geofenceCenterTrigger, setGeofenceCenterTrigger] = useState(0);
   const [mapStyle, setMapStyle] = useState('standard');
+  const [mapSearch, setMapSearch] = useState('');
+  const [zoneSearch, setZoneSearch] = useState('');
   const [dismissedAlerts, setDismissedAlerts] = useState(new Set());
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -142,11 +146,6 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const activeAlertKeys = React.useRef(new Set());
   const soundStorageKey = userId ? `safewatch.barangay.alerts.v1:${userId}` : null;
 
-  const tileLayers = {
-    standard: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    satellite: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-  };
-
   // Map Click Listener for Geofencing
   const LocationPicker = () => {
     useMapEvents({
@@ -154,8 +153,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         if (isPickingLocation) {
           setNewLocation(prev => ({
             ...prev,
-            lat: e.latlng.lat.toFixed(6),
-            lng: e.latlng.lng.toFixed(6)
+            lat: e.latlng.wrap().lat.toFixed(6),
+            lng: e.latlng.wrap().lng.toFixed(6)
           }));
         }
       },
@@ -270,7 +269,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     setNewLocation({ name: '', lat: '', lng: '', radius: 30 });
   };
 
-  const [seniors, setSeniors] = useState([]);
+  const [seniorRecords, setSeniors] = useState([]);
+  const seniors = seniorRecords.map(senior => dashboardLocationAt(senior, liveTime.getTime()));
   const [sosAlerts, setSosAlerts] = useState([]);
 
   // Registration Form States
@@ -278,34 +278,6 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [registerDeviceId, setRegisterDeviceId] = useState('');
   const [registerAge, setRegisterAge] = useState(70);
   const [registerGender, setRegisterGender] = useState('Male');
-
-  // WKB Hex Parser to extract Latitude & Longitude from PostGIS geography point
-  const parseWkbPoint = (hex) => {
-    if (!hex || hex.length < 50) return null;
-    try {
-      // Little-endian double reading from hex string
-      const readDoubleLE = (hexStr, offset) => {
-        const bytes = new Uint8Array(8);
-        for (let i = 0; i < 8; i++) {
-          const byteVal = parseInt(hexStr.slice(offset + i * 2, offset + i * 2 + 2), 16);
-          bytes[i] = byteVal;
-        }
-        const view = new DataView(bytes.buffer);
-        return view.getFloat64(0, true);
-      };
-
-      const type = parseInt(hex.slice(2, 10), 16);
-      const hasSrid = (type & 0x20000000) !== 0;
-      const coordOffset = hasSrid ? 18 * 2 : 9 * 2;
-
-      const lng = readDoubleLE(hex, coordOffset);
-      const lat = readDoubleLE(hex, coordOffset + 16);
-      return { lat, lng };
-    } catch (e) {
-      console.error("WKB parse error:", e);
-      return null;
-    }
-  };
 
   // Supabase Fetch & Realtime Sync
   const fetchSeniors = async () => {
@@ -327,15 +299,16 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             .order('created_at', { ascending: false })
             .limit(1);
 
+          if (telError) throw telError;
           const latestTelemetry = telList && telList[0] ? telList[0] : null;
           const packetTime = telemetryTimestamp(latestTelemetry);
 
-          // Parse coordinates from PostGIS point using WKB hex parser
-          let lat = 14.0049; // Default to Lipa City / Marawoy area
-          let lng = 121.1614;
+          // The shared parser handles PostGIS EWKB endianness/SRID, WKT and GeoJSON.
+          let lat = null;
+          let lng = null;
           let hasGpsLock = false;
           if (latestTelemetry && latestTelemetry.location) {
-            const parsed = parseWkbPoint(latestTelemetry.location);
+            const parsed = parseGpsPoint(latestTelemetry.location);
             if (isCurrentGpsPoint(parsed, packetTime)) {
               hasGpsLock = true;
               lat = parsed.lat;
@@ -386,6 +359,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             snr: Number.isFinite(latestTelemetry?.snr_db) ? latestTelemetry.snr_db : null,
             location: hasGpsLock ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'No current GPS fix',
             hasGpsLock,
+            insideSafeZone: isInSafeZone,
+            insideTrustedZone: isInTrustedZone,
+            positionAt: packetTime,
             lat: lat,
             lng: lng,
             time: packetTime ? new Date(packetTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
@@ -583,7 +559,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const renderContent = () => {
     const visibleAlerts = sosAlerts.filter(a => !dismissedAlerts.has(a.id));
     const totalSeniors = seniors.length.toString();
-    const safeSeniorsCount = seniors.filter(s => s.type === 'normal' || s.type === 'trusted').length.toString().padStart(2, '0');
+    const safeSeniorsCount = seniors.filter(s => s.hasGpsLock && s.insideSafeZone).length.toString().padStart(2, '0');
+    const outsideSeniorsCount = seniors.filter(s => s.hasGpsLock && !s.insideSafeZone && !s.insideTrustedZone).length;
     const activeAlertsCount = visibleAlerts.length.toString().padStart(2, '0');
 
     const allVitalsNormal = seniors.length === 0 || seniors.every(s => s.spo2 >= 95 && s.pulse >= 60 && s.pulse <= 100);
@@ -634,7 +611,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               </div>
               <div className="flex-1 relative z-0">
                 <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
+                  <SafeWatchTiles />
+                  <MapNavigation bounds={sanIsidroEastGeofence} />
                   <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
                   {trustedLocations.map(loc => (
                     <Circle key={loc.id} center={[loc.lat, loc.lng]} radius={loc.radius} pathOptions={{ color: '#4a7c59', fillColor: '#4a7c59', fillOpacity: 0.15, weight: 2, dashArray: '5, 10' }} />
@@ -747,7 +725,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                           </div>
                         </div>
                       </td>
-                      <td className="table-cell"><span className={`badge ${senior.type === 'trusted' ? 'badge-blue' : 'badge-green'}`}>{senior.type === 'trusted' ? 'Trusted Loc' : 'Safe Zone'}</span></td>
+                      <td className="table-cell"><span className={`badge ${senior.type === 'trusted' ? 'badge-blue' : ['sos', 'outside'].includes(senior.type) ? 'badge-red' : senior.type === 'normal' ? 'badge-green' : 'badge-orange'}`}>{senior.status}</span></td>
                       <td className="table-cell"><span className="font-semibold">{senior.pulse}</span> <span className="text-gray-400 text-xs">bpm</span></td>
                       <td className="table-cell"><span className="font-semibold">{senior.spo2}</span><span className="text-gray-400 text-xs">%</span></td>
                       <td className="table-cell">
@@ -800,6 +778,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <option value="Inside Safe Zone">Inside Safe Zone</option>
                   <option value="Trusted Location">Trusted Location</option>
                   <option value="Outside Safe Zone">Outside Safe Zone</option>
+                  <option value="No current GPS fix">No current GPS fix</option>
                   <option value="SOS ALERT!">SOS ALERT!</option>
                 </select>
               </div>
@@ -879,7 +858,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                         <p className="text-[10px] text-slate-400 font-medium">{senior.date}</p>
                       </td>
                       <td className="table-cell">
-                        <button onClick={() => { setSelectedSeniorLoc([senior.lat, senior.lng]); setActiveTab('Live Location'); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg font-bold hover:bg-emerald-100 transition-all">
+                        <button disabled={!senior.hasGpsLock} onClick={() => { setSelectedSeniorLoc([senior.lat, senior.lng]); setActiveTab('Live Location'); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg font-bold hover:bg-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                           <Eye className="w-4 h-4" />
                           <span className="text-[10px]">View</span>
                         </button>
@@ -901,16 +880,16 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <h3 className="text-lg font-bold text-slate-800">Track Seniors</h3>
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input type="text" placeholder="Search name..." className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-[#4a7c59]/20 transition-all" />
+                <input aria-label="Search seniors on map" value={mapSearch} onChange={event => setMapSearch(event.target.value)} type="text" placeholder="Search name..." className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-[#4a7c59]/20 transition-all" />
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3 pb-4">
-              {seniors.map(senior => (
-                <div
+              {seniors.filter(senior => senior.name?.toLowerCase().includes(mapSearch.trim().toLowerCase())).map(senior => (
+                <button type="button" disabled={!senior.hasGpsLock} aria-label={`Locate ${senior.name}`}
                   key={senior.id}
                   onClick={() => setSelectedSeniorLoc([senior.lat, senior.lng])}
-                  className="bg-white/80 backdrop-blur-xl p-4 rounded-2xl shadow-sm border border-white cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group"
+                  className="w-full text-left bg-white/80 backdrop-blur-xl p-4 rounded-2xl shadow-sm border border-white cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <img src={SENIOR_AVATAR} className="w-10 h-10 rounded-full bg-slate-100" />
@@ -928,19 +907,21 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       <HeartPulse className="w-3.5 h-3.5 text-red-400" />
                       {senior.pulse} bpm
                     </div>
-                    <button className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-[#4a7c59] group-hover:text-white transition-colors">
+                    <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-[#4a7c59] group-hover:text-white transition-colors">
                       <MapPin className="w-3 h-3" />
-                    </button>
+                    </span>
                   </div>
-                </div>
+                </button>
               ))}
+              {!seniors.some(senior => senior.name?.toLowerCase().includes(mapSearch.trim().toLowerCase())) && <p role="status" className="p-4 text-sm text-slate-500">No seniors match this search.</p>}
             </div>
           </div>
 
           {/* Map Container */}
           <div className="flex-1 relative rounded-[2.5rem] overflow-hidden border border-white shadow-[0_8px_30px_rgb(0,0,0,0.06)] bg-slate-100 z-0">
             <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
+              <SafeWatchTiles />
+              <MapNavigation bounds={sanIsidroEastGeofence} />
               <MapController center={selectedSeniorLoc} zoom={18} />
               {seniors.filter(senior => senior.hasGpsLock).map(senior => (
                 <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)}>
@@ -961,12 +942,6 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
             </MapContainer>
 
-            {/* Map Floating UI */}
-            <div className="absolute top-6 right-6 z-[1000] flex flex-col gap-2">
-              <button className="w-10 h-10 bg-white/90 backdrop-blur rounded-xl shadow-lg border border-white flex items-center justify-center text-slate-600 hover:text-[#4a7c59] transition-colors"><Plus className="w-5 h-5" /></button>
-              <button className="w-10 h-10 bg-white/90 backdrop-blur rounded-xl shadow-lg border border-white flex items-center justify-center text-slate-600 hover:text-[#4a7c59] transition-colors"><span className="text-xl font-medium leading-none mb-0.5">-</span></button>
-              <button onClick={() => setSelectedSeniorLoc([14.039, 121.123])} className="w-10 h-10 mt-2 bg-white/90 backdrop-blur rounded-xl shadow-lg border border-white flex items-center justify-center text-blue-500 hover:bg-blue-50 transition-colors"><Map className="w-5 h-5" /></button>
-            </div>
           </div>
         </div>
       );
@@ -1108,6 +1083,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         </div>
       );
     } else if (activeTab === 'Geofence Zones') {
+      const mainZoneMatches = 'San Isidro East'.toLowerCase().includes(zoneSearch.trim().toLowerCase());
+      const filteredHubs = trustedLocations.filter(loc => loc.name.toLowerCase().includes(zoneSearch.trim().toLowerCase()));
       return (
         <div className="p-8 space-y-8 flex-1 overflow-y-auto">
           {/* Stats Grid */}
@@ -1115,7 +1092,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             <StatCard icon={MapPin} value="1" label="Geofencing Zone" subtext="Currently in use" color="text-emerald-600" iconBg="bg-emerald-100" signal={100} />
             <StatCard icon={Users} value={totalSeniors} label="Seniors Assigned" subtext="Across the zone" color="text-blue-600" iconBg="bg-blue-100" signal={parseInt(totalSeniors) > 0 ? 100 : 0} />
             <StatCard icon={Bell} value={activeAlertsCount} label="Active Alerts" subtext="Outside safe zone" color="text-orange-600" iconBg="bg-orange-100" signal={activeAlertsCount === "00" ? 100 : Math.max(0, 100 - (parseInt(activeAlertsCount) * 20))} />
-            <StatCard icon={Clock} value={parseInt(totalSeniors) - parseInt(safeSeniorsCount)} label="Outside Safes" subtext="Current trips" color="text-purple-600" iconBg="bg-purple-100" signal={parseInt(totalSeniors) > 0 ? ((parseInt(totalSeniors) - parseInt(safeSeniorsCount)) / parseInt(totalSeniors)) * 100 : 0} />
+            <StatCard icon={Clock} value={outsideSeniorsCount} label="Outside Safe Areas" subtext="With a current GPS fix" color="text-purple-600" iconBg="bg-purple-100" signal={seniors.length ? outsideSeniorsCount / seniors.length * 100 : 0} />
           </div>
 
           <div className="grid grid-cols-5 gap-8">
@@ -1135,12 +1112,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </div>
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="text" placeholder="Search zone..." className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none" />
+                  <input aria-label="Search map zones" value={zoneSearch} onChange={event => setZoneSearch(event.target.value)} type="text" placeholder="Search zone..." className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none" />
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {/* Main Geofence */}
-                <button type="button"
+                {mainZoneMatches && <button type="button"
                   onClick={() => { setGeofenceCenter(null); setGeofenceCenterTrigger(prev => prev + 1); }}
                   className="p-5 w-full text-left rounded-3xl border border-emerald-100 bg-emerald-50/30 flex items-center justify-between cursor-pointer group hover:bg-emerald-50 transition-all"
                 >
@@ -1158,10 +1135,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <span className="px-2.5 py-1 bg-emerald-100 text-emerald-600 text-[9px] font-black uppercase rounded-lg">Active</span>
                     <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 transition-colors" />
                   </div>
-                </button>
+                </button>}
 
                 {/* Additional Trusted Hubs */}
-                {trustedLocations.map(loc => (
+                {filteredHubs.map(loc => (
                   <div
                     key={loc.id}
                     onClick={() => { setGeofenceCenter([loc.lat, loc.lng]); setGeofenceCenterTrigger(prev => prev + 1); }}
@@ -1193,11 +1170,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   </div>
                 ))}
               </div>
-              <div className="p-4 bg-slate-50/50 text-[10px] text-slate-400 font-medium px-8">Showing {trustedLocations.length + 1} zones</div>
+              <div className="p-4 bg-slate-50/50 text-[10px] text-slate-400 font-medium px-8">Showing {filteredHubs.length + Number(mainZoneMatches)} zones</div>
             </div>
             <div className="col-span-3 relative rounded-[2.5rem] overflow-hidden border border-white shadow-[0_8px_30px_rgb(0,0,0,0.06)] bg-white h-[500px]">
               <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [32, 32] }} className="h-full w-full" zoomControl={false}>
-                <TileLayer url={tileLayers[mapStyle]} attribution="&copy; OpenStreetMap contributors" />
+                <SafeWatchTiles variant={mapStyle} />
+                <MapNavigation bounds={sanIsidroEastGeofence} />
                 <MapController center={geofenceCenter} zoom={17} trigger={geofenceCenterTrigger} bounds={sanIsidroEastGeofence} />
                 <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
                 <LocationPicker />
@@ -1217,7 +1195,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 {/* Show current picking preview */}
                 {newLocation.lat && newLocation.lng && (
                   <>
-                    <Marker position={[newLocation.lat, newLocation.lng]} />
+                    <Marker position={[Number(newLocation.lat), Number(newLocation.lng)]} icon={createCustomIcon('', 'trusted')} />
                     <Circle
                       center={[newLocation.lat, newLocation.lng]}
                       radius={newLocation.radius}
@@ -1242,7 +1220,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-4 animate-enter">
                   <div className="bg-white/90 backdrop-blur-md text-slate-800 px-6 py-3 rounded-2xl shadow-xl border border-white text-sm font-bold flex items-center gap-3">
                     <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-                    {newLocation.lat ? 'Location selected. You can drag or click again.' : 'Tap anywhere on the map to place the hub.'}
+                    {newLocation.lat ? 'Location selected. Click the map again to change it.' : 'Tap anywhere on the map to place the hub.'}
                   </div>
                   {newLocation.lat && (
                     <button
@@ -1258,9 +1236,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </div>
               )}
               {isPickingLocation && (
-                 <button
+                 <button type="button" aria-label="Cancel hub placement"
                   onClick={() => setIsPickingLocation(false)}
-                  className="absolute top-6 right-6 z-[1000] w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors"
+                  className="absolute top-6 right-20 z-[1000] w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
