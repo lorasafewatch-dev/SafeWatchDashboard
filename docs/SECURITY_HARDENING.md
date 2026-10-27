@@ -1,5 +1,22 @@
 # SafeWatch security update — 27 October 2026
 
+## Live rollout status
+
+Both existing Vercel apps are published. The family approval and identity
+hardening migrations are applied to the live database. Email confirmation is
+enabled; production confirmation/recovery redirects are saved; TOTP is enabled.
+Live checks retained two watches, two existing family links and one approved
+administrator. Staff must enroll their own authenticator at their next sign-in.
+Real email delivery and account-owner enrollment still need an owner check.
+
+The gateway/radio migration is **not applied**, and no device has been flashed.
+Until the coordinated hardware cutover below, the old public-key telemetry
+insertion path and legacy radio protections remain in service. The web changes
+do not close that separate device-ingestion vulnerability.
+
+The final deployment commits, full dependency audit results, test coverage and
+remaining operator steps are recorded in `outputs/security-fixes/ROLLOUT_STATUS.md`.
+
 ## Multiple seniors remain supported
 
 One family account can monitor multiple seniors. There is no one-senior limit.
@@ -128,6 +145,8 @@ watch assignment, replay/rate limits and payload validation. Browser regression
 tests use synthetic users through the actual app and approval component.
 
 Both app dependency graphs use patched Vite/PostCSS/nanoid/source-map-js versions.
+Compatible transitive build-tool patches also address the additional findings
+in the complete dependency audit; both full audits report zero vulnerabilities.
 Development servers bind to localhost by default. Test fixtures, local `.env`,
 dependency directories, credentials and logs are excluded from deployment packages.
 
