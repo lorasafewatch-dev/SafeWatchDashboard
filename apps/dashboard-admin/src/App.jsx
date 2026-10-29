@@ -44,7 +44,7 @@ import { AdminOverview, ReadingLabel } from './components/AdminNatureUI.jsx';
 import { monitoringSummary, readingText, watchUpdate } from './adminPresentation.js';
 import './admin-nature.css';
 import useAccountSession from '../../shared/components/useAccountSession.js';
-import AccountMfaGate from '../../shared/components/AccountMfaGate.jsx';
+import AccountMfaGate from './components/AdminMfaGate.jsx';
 import AuthEntry from '../../shared/components/AuthEntry.jsx';
 import PrivacyTermsGate from '../../shared/components/PrivacyTermsGate.jsx';
 import PasswordRecovery from '../../shared/components/PasswordRecovery.jsx';

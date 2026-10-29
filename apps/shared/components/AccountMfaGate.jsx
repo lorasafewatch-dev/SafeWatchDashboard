@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { accountSecurityError, verifyAuthenticator } from '../accountSecurity.js';
 import AccountAuthenticator from './AccountAuthenticator.jsx';
 
-export default function AccountMfaGate({ client, access, error, onVerified }) {
+export default function AccountMfaGate({ client, access, error, onVerified, className = '', header }) {
   const factors = access?.factors.filter(factor => factor.factor_type === 'totp') || [];
   const [factorId, setFactorId] = useState(factors[0]?.id || '');
   const [code, setCode] = useState('');
@@ -15,8 +15,9 @@ export default function AccountMfaGate({ client, access, error, onVerified }) {
     try { await action(); } catch (failure) { setMessage(accountSecurityError(failure)); }
     finally { locked.current = false; setBusy(false); }
   };
-  return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+  return <div className={`min-h-screen flex items-center justify-center bg-slate-50 p-6 ${className}`}>
     <section className="w-full max-w-md bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-5">
+      {header}
       <h1 className="text-2xl font-bold text-slate-800">{access ? 'Two-factor verification' : 'Check your account'}</h1>
       {access?.enrollmentRequired ? <AccountAuthenticator client={client} user={access.user} required onUpdated={onVerified} /> : access ? <>
         <p className="text-sm text-slate-600">Enter the current 6-digit code from your authenticator to continue.</p>

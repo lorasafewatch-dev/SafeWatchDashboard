@@ -1,0 +1,72 @@
+.admin-verification {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  padding: 32px 40px 21px;
+  color: #0b203c;
+  background: #edf6ee;
+  font-family: 'Outfit', system-ui, sans-serif;
+}
+.admin-verification *, .admin-verification *::before, .admin-verification *::after { box-sizing: border-box; }
+.admin-verification__background { position: fixed; z-index: -1; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, #f3fbf1b8 10%, #f0faed8c 60%), linear-gradient(120deg, #f3faf2d9, #edf8e86e), url('../assets/nature-garden.webp') center / cover; }
+.admin-verification__brand { display: flex; align-items: center; gap: 11px; align-self: flex-start; }
+.admin-verification__brand-mark { display: grid; place-items: center; width: 40px; height: 45px; border: 1px solid #ffffff78; border-radius: 13px 13px 18px 18px; color: #fff; background: linear-gradient(145deg, #17bc91, #00886d); box-shadow: 0 4px 12px #0076550d; }
+.admin-verification__brand-mark svg { width: 29px; height: 31px; stroke-width: 1.6; }
+.admin-verification__brand strong { display: block; color: #0b203c; font-size: 27px; font-weight: 750; line-height: 1.05; letter-spacing: -.8px; }
+.admin-verification__brand div > span { display: block; margin-top: 4px; color: #466b75; font-size: 9px; line-height: 1.4; font-weight: 600; letter-spacing: 2.2px; text-transform: uppercase; }
+.admin-verification__content { display: flex; flex: 1; justify-content: center; align-items: center; min-width: 0; padding: 38px 0 46px; }
+.admin-verification .admin-verification__gate { display: block; width: 100%; min-height: 0; padding: 0; background: transparent; }
+.admin-verification__gate > section { width: 100%; max-width: 475px; margin: 0 auto; padding: 32px 35px 25px; border: 1px solid #fffffff2; border-radius: 28px; color: #0b203c; background: linear-gradient(140deg, #fefffaec, #f5fff4cf); box-shadow: 0 16px 45px #154d3020, inset 0 1px 0 #ffffffc9; backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+.admin-verification__gate > section > * { margin-block: 0; }
+.admin-verification__gate > section > * + * { margin-top: 18px; }
+.admin-verification__identity { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 15px; }
+.admin-verification__icon { display: grid; place-items: center; width: 63px; height: 65px; border: 1px solid #bce5d6; border-radius: 20px; color: #00876d; background: linear-gradient(145deg, #e7faf0, #d4f0e2); box-shadow: inset 0 1px 0 #ffffffd4; }
+.admin-verification__icon svg { width: 29px; height: 29px; stroke-width: 1.6; }
+.admin-verification__identity p { margin: 0; color: #00826a; font-size: 10px; line-height: 1.3; font-weight: 650; letter-spacing: 1.8px; text-transform: uppercase; }
+.admin-verification__gate > section > h1 { margin-top: 12px; color: #0b203c; font-size: 28px; line-height: 1.18; font-weight: 650; letter-spacing: -.75px; text-align: center; }
+.admin-verification__gate > section > p:not([role]) { margin-top: 12px; margin-bottom: 25px; color: #567184; font-size: 14px; line-height: 1.55; text-align: center; }
+.admin-verification__gate form { display: flex; flex-direction: column; gap: 18px; }
+.admin-verification__gate form > * { margin-block: 0; }
+.admin-verification__gate label { display: block; color: #2a4b61; font-size: 12px; line-height: 1.5; font-weight: 550; }
+.admin-verification__gate input, .admin-verification__gate select { display: block; width: 100%; min-height: 52px; margin-top: 7px; padding: 12px 14px; border: 1px solid #bbd5cd; border-radius: 12px; color: #0d4d49; background: #fbfffdc9; font: inherit; font-size: 16px; transition: border-color .15s, box-shadow .15s; }
+.admin-verification__gate input { min-height: 58px; font-size: 25px; line-height: 1.3; letter-spacing: .42em; text-align: center; font-variant-numeric: tabular-nums; padding-left: calc(14px + .42em); }
+.admin-verification__gate input:focus, .admin-verification__gate select:focus { border-color: #03997a; outline: none; box-shadow: 0 0 0 3px #009a701c; background: #ffffffde; }
+.admin-verification__gate button { font-family: inherit; touch-action: manipulation; }
+.admin-verification__gate button:disabled { cursor: default; opacity: .6; }
+.admin-verification__gate button:focus-visible, .admin-verification__gate summary:focus-visible { outline: 2px solid #00876d; outline-offset: 4px; }
+.admin-verification__gate button.bg-emerald-600 { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 47px; padding: 12px 18px; border: 1px solid #0ba58a; border-radius: 12px; color: #fff; background: linear-gradient(140deg, #0caa8a, #008371); box-shadow: inset 0 1px 0 #ffffff3b, 0 5px 13px #00765e14; font-size: 14px; line-height: 1.4; font-weight: 600; cursor: pointer; }
+.admin-verification__gate button.bg-emerald-600:hover:not(:disabled) { background: #007f69; }
+.admin-verification__gate > section > button:not(:last-child) { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 46px; padding: 11px 16px; border: 1px solid #0b9d80; border-radius: 12px; color: #fff; background: #008970; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.admin-verification__gate > section > button:last-child { display: block; min-height: 40px; margin: 14px auto 0; padding: 7px 13px; border: 0; border-radius: 7px; color: #587287; background: transparent; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.admin-verification__gate > section > button:last-child:hover:not(:disabled) { color: #007f69; background: #e4f4e87d; }
+.admin-verification__gate [role="alert"] { padding: 11px 13px; border: 1px solid #ebc3c9; border-radius: 11px; color: #a03144; background: #fff4f5e8; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.admin-verification__gate [role="status"] { padding: 11px 13px; border-radius: 11px; color: #167453; background: #eaf9ed; font-size: 13px; line-height: 1.5; }
+.admin-verification__gate section[aria-label="Authenticator setup"] { color: #547085; font-size: 13px; }
+.admin-verification__gate section[aria-label="Authenticator setup"] > p { font-size: 13px; line-height: 1.6; }
+.admin-verification__gate section[aria-label="Authenticator setup"] img { display: block; max-width: 100%; height: auto; margin-right: auto; margin-left: auto; border: 1px solid #d0e2d9; border-radius: 12px; background: #fff; }
+.admin-verification__gate details { padding: 11px 12px; border: 1px solid #d1e5da; border-radius: 10px; background: #f6fff7; font-size: 12px; }
+.admin-verification__gate summary { cursor: pointer; color: #27785f; }
+.admin-verification__gate details code { color: #244e54; font-size: 12px; }
+.admin-verification__footer { display: flex; align-items: center; justify-content: center; gap: 7px; color: #4d7467; font-size: 11px; line-height: 1.5; text-align: center; }
+.admin-verification__footer svg { width: 15px; height: 15px; flex-shrink: 0; stroke-width: 1.6; }
+@media (max-width: 599px) {
+  .admin-verification { padding: max(24px, env(safe-area-inset-top)) 19px max(19px, env(safe-area-inset-bottom)); }
+  .admin-verification__brand { align-self: center; }
+  .admin-verification__brand-mark { width: 35px; height: 40px; }
+  .admin-verification__brand strong { font-size: 25px; }
+  .admin-verification__content { padding: 33px 0; }
+  .admin-verification__gate > section { padding: 28px 23px 20px; border-radius: 24px; }
+  .admin-verification__gate > section > h1 { font-size: 25px; }
+  .admin-verification__gate > section > p:not([role]) { font-size: 13px; }
+}
+@media (max-width: 359px) {
+  .admin-verification { padding-inline: 14px; }
+  .admin-verification__gate > section { padding-inline: 20px; }
+  .admin-verification__gate > section > h1 { font-size: 23px; }
+  .admin-verification__gate input { font-size: 23px; letter-spacing: .35em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-verification *, .admin-verification *::before, .admin-verification *::after { animation: none !important; transition: none !important; }
+}
