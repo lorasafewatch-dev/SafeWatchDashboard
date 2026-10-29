@@ -1,4 +1,5 @@
 import { readAccountAccess } from './accountSecurity.js';
+import { signupPrivacyDeclaration } from './privacyTerms.js';
 
 const normalizeEmail = value => {
   const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -31,7 +32,8 @@ export async function signUpAccount(client, draft, app, origin) {
   if (!fullName || fullName.length > 100) throw new Error('Enter a full name of up to 100 characters.');
   const email = normalizeEmail(draft.email);
   const password = validateNewPassword(draft.password,draft.confirmation);
-  const { data, error } = await client.auth.signUp({email,password,options:{emailRedirectTo:authReturnUrl(origin),data:{full_name:fullName,requested_app:app}}});
+  const privacy = signupPrivacyDeclaration(draft.privacyAcceptance);
+  const { data, error } = await client.auth.signUp({email,password,options:{emailRedirectTo:authReturnUrl(origin),data:{full_name:fullName,requested_app:app,...privacy}}});
   if (error) throw error;
   if (!data?.user) throw new Error('Registration could not be verified. Please retry.');
   return data;

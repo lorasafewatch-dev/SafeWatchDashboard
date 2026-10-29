@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { readAccountAccess } from '../accountSecurity.js';
 import { accountCanUseApp, accountMatchesApp, loadAccountPermission } from '../accountAccess.js';
 import { getRecoveryLink, getRecoveryState, installRecoveryListener, recoveryRedirectError } from '../authFlow.js';
+import { loadPrivacyAcceptance } from '../privacyTerms.js';
 
 export default function useAccountSession(client, app) {
   const [state, setState] = useState({ loading: true, access: null, error: '' });
@@ -43,7 +44,14 @@ export default function useAccountSession(client, app) {
       if (!data?.session) return {access:null,recovery:getRecoveryState(client,null),linkError:recoveryRedirectError(client)};
       const access = await readAccountAccess(client, data.session.user.id);
       const permission = await loadAccountPermission(client,access.user.id);
-      return {access,permission,recovery:getRecoveryState(client,data.session),linkError:recoveryRedirectError(client)};
+      const recovery = getRecoveryState(client,data.session);
+      const linkError = recoveryRedirectError(client);
+      let privacyReceipt = null; let privacyError = '';
+      if (accountMatchesApp(permission,app) && !recovery && !linkError) {
+        try { privacyReceipt = await loadPrivacyAcceptance(client,access.user.id,app); }
+        catch (failure) { privacyError = failure.message || 'Unable to check privacy acceptance. Please retry.'; }
+      }
+      return {access,permission,recovery,linkError,privacyReceipt,privacyError};
     })().then(result => {
       if (active && request === sequence.current) {
         accountId.current = result.access?.user.id || null;
@@ -60,11 +68,13 @@ export default function useAccountSession(client, app) {
   const recoveryAccess = state.recovery && (!state.access || matches) ? {user:state.access?.user,recovery:state.recovery} : null;
   const enrollmentRequired = !!state.access && matches && state.permission?.requested_app === 'dashboard' && !state.access.factors.length;
   const needsMfa = state.access && (!state.access.allowed || enrollmentRequired) && (roleAllowed || matches && state.recovery?.valid);
-  return { isLoadingAuth: state.loading, isLoggedIn: !!state.access?.allowed && !enrollmentRequired && roleAllowed && !state.recovery && !state.linkError,
+  const privacyRequired = !!state.access && matches && !state.recovery && !state.linkError && !state.privacyReceipt;
+  return { isLoadingAuth: state.loading, isLoggedIn: !!state.access?.allowed && !enrollmentRequired && roleAllowed && !state.recovery && !state.linkError && !!state.privacyReceipt,
     userId: state.access?.user.id || null, accountUser: state.access?.user,
     accountPermission:state.permission, recoveryAccess,recoveryLink:state.recoveryLink,
     accessDenied:state.access && !roleAllowed && !(matches && state.recovery) ? state.permission : null,
     pendingAccess:needsMfa ? { ...state.access, enrollmentRequired } : null,
+    privacyRequired, privacyError:state.privacyError,
     authLinkError:state.linkError, authNotice:notice, setAuthNotice:setNotice,
     authError: state.error, retryAuth: () => setRevision(value => value + 1) };
 }

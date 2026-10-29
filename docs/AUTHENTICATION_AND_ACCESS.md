@@ -1,5 +1,10 @@
 # Login, recovery and barangay approval
 
+**Privacy terms update (29 October 2026):** Both apps now show terms at sign-up
+and first login. Follow [Terms and privacy pop-ups](PRIVACY_TERMS.md) and apply
+`20261029_privacy_terms.sql` after the security migrations before deploying the
+updated clients. Existing accounts review the notice at their next visit.
+
 **Current security update (27 October 2026):** Follow
 [Security hardening](SECURITY_HARDENING.md) for the latest migrations and rollout.
 Families now request barangay approval for each additional watch, staff require

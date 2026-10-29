@@ -51,6 +51,7 @@ import StatCard from './components/StatCard.jsx';
 import useAccountSession from '../../shared/components/useAccountSession.js';
 import AccountMfaGate from '../../shared/components/AccountMfaGate.jsx';
 import AuthEntry from '../../shared/components/AuthEntry.jsx';
+import PrivacyTermsGate from '../../shared/components/PrivacyTermsGate.jsx';
 import PasswordRecovery from '../../shared/components/PasswordRecovery.jsx';
 import RecoveryLinkConfirm from '../../shared/components/RecoveryLinkConfirm.jsx';
 import AccountAccessDenied from '../../shared/components/AccountAccessDenied.jsx';
@@ -109,7 +110,7 @@ const PolygonWithLegend = ({ positions, name }) => (
 
 function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const supabase = client || getDashboardClient();
-  const { isLoggedIn, isLoadingAuth, userId, accountUser, accountPermission, pendingAccess, accessDenied, recoveryAccess, recoveryLink, authLinkError, authNotice, setAuthNotice, authError, retryAuth } = useAccountSession(supabase, 'dashboard');
+  const { isLoggedIn, isLoadingAuth, userId, accountUser, accountPermission, pendingAccess, accessDenied, recoveryAccess, recoveryLink, authLinkError, authNotice, setAuthNotice, authError, retryAuth, privacyRequired, privacyError } = useAccountSession(supabase, 'dashboard');
   const [confirmingAlerts, setConfirmingAlerts] = useState(false);
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -550,6 +551,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   }
 
   if (recoveryLink) return <RecoveryLinkConfirm client={supabase} link={recoveryLink} onVerified={retryAuth} />;
+  if (privacyRequired) return <PrivacyTermsGate key={userId} client={supabase} user={accountUser} app="dashboard" error={privacyError} onAccepted={retryAuth} onRetry={retryAuth} />;
   if (pendingAccess || authError) return <AccountMfaGate key={pendingAccess?.user.id || 'error'} client={supabase} access={pendingAccess} error={authError} onVerified={retryAuth} />;
   if (accessDenied) return <AccountAccessDenied client={supabase} access={accessDenied} user={accountUser} app='dashboard' onRetry={retryAuth} />;
   if (recoveryAccess) return <PasswordRecovery key={recoveryAccess.user?.id || 'invalid'} client={supabase} {...recoveryAccess} onNotice={setAuthNotice} onFinished={retryAuth} />;
