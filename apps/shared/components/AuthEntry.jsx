@@ -1,8 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { authFlowError, requestPasswordReset, resendAccountConfirmation, signInAccount, signUpAccount, verifyRecoveryCode } from '../authFlow.js';
 import PrivacyTermsDialog from './PrivacyTermsDialog.jsx';
+import BarangayAuthLayout, { AuthIcon } from './BarangayAuthLayout.jsx';
 
 const inputClass = 'mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 focus:outline-2 focus:outline-emerald-500 disabled:opacity-50';
+
+function AuthField({ label, dashboard, icon, children, ...props }) {
+  const id = useId();
+  return <div className={dashboard ? 'barangay-auth__field' : undefined}>
+    <label htmlFor={id} className={dashboard ? undefined : 'block text-sm font-semibold text-slate-600'}>{label}</label>
+    <div className={dashboard ? 'barangay-auth__input-wrap' : undefined}>
+      {dashboard && <AuthIcon name={icon}/>}
+      <input {...props} id={id} className={dashboard ? 'barangay-auth__input' : inputClass}/>
+      {children}
+    </div>
+  </div>;
+}
+
 export default function AuthEntry({client,app,initialError='',notice='',onRecovered}) {
   const [mode,setMode]=useState('login');
   const [email,setEmail]=useState(''); const [password,setPassword]=useState('');
@@ -42,39 +56,42 @@ export default function AuthEntry({client,app,initialError='',notice='',onRecove
     }
   });};
   const dashboard=app==='dashboard';
-  return <><div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 md:p-10">
+  const privacyLink=<button type="button" disabled={busy} onClick={()=>setPrivacyDialog('read')} className={dashboard?'barangay-auth__privacy':'w-full text-xs font-semibold text-slate-500 underline'}>Terms and Conditions &amp; Privacy Notice</button>;
+  const passwordToggle=dashboard&&<button type="button" disabled={busy} onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?'Hide password':'Show password'} aria-pressed={showPassword} className="barangay-auth__eye"><AuthIcon name={showPassword?'eyeOff':'eye'}/></button>;
+  const card=<section className={dashboard?'barangay-auth__card':'w-full max-w-md mx-auto bg-white border border-slate-100 rounded-[2rem] p-7 md:p-10 shadow-sm space-y-6'} aria-labelledby="auth-entry-heading">
+        <div>{dashboard?<p className="barangay-auth__access"><span><AuthIcon name="shield"/></span>Barangay access</p>:<p className="font-black text-emerald-700 mb-3">SafeWatch · Family</p>}
+          <h2 id="auth-entry-heading" className={dashboard?undefined:'text-3xl font-bold text-slate-800'}>{mode==='signup'?'Create your account':mode==='forgot'?'Forgot password?':mode==='code'?'Enter reset code':'Welcome back'}</h2>
+          <p className={dashboard?'barangay-auth__subtitle':'mt-2 text-sm text-slate-500'}>{mode==='signup'?(dashboard?'Create your barangay account. New staff accounts require super-admin approval. Use a different email from your family account.':'Create a family account using a different email from your barangay account.'):mode==='forgot'?'Enter your account email to request a password-reset link.':mode==='code'?'Enter the 6-digit reset code from your newest password-reset email.':dashboard?'Sign in to your SafeWatch account.':'Sign in with the account for this app.'}</p>
+        </div>
+        {error&&<p role="alert" className={dashboard?'barangay-auth__message barangay-auth__message--error':'rounded-xl bg-red-50 p-4 text-sm text-red-700'}>{error}</p>}
+        {message&&<p role="status" className={dashboard?'barangay-auth__message':'rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800'}>{message}</p>}
+        <form onSubmit={submit} className={dashboard?'barangay-auth__form':'space-y-5'}>
+          {mode==='signup'&&<AuthField dashboard={dashboard} icon="user" label="Full name" autoComplete="name" required maxLength={100} disabled={busy} value={fullName} onChange={event=>setFullName(event.target.value)}/>}
+          <AuthField dashboard={dashboard} icon="mail" label="Email address" type="email" placeholder={dashboard?'you@example.com':undefined} autoComplete={mode==='login'?'username':'email'} required maxLength={254} disabled={busy} value={email} onChange={event=>setEmail(event.target.value)}/>
+          {mode==='code'&&<AuthField dashboard={dashboard} icon="key" label="Reset code" type="text" inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6} disabled={busy} value={resetCode} onChange={event=>setResetCode(event.target.value.replace(/\D/g,''))}/>}
+          {mode!=='forgot'&&mode!=='code'&&<>
+            <AuthField dashboard={dashboard} icon="lock" label="Password" type={showPassword?'text':'password'} placeholder={dashboard?'••••••••••':undefined} autoComplete={mode==='signup'?'new-password':'current-password'} required minLength={mode==='signup'?8:undefined} disabled={busy} value={password} onChange={event=>setPassword(event.target.value)}>{passwordToggle}</AuthField>
+            {mode==='signup'&&<><AuthField dashboard={dashboard} icon="lock" label="Confirm password" type={showPassword?'text':'password'} autoComplete="new-password" required disabled={busy} value={confirmation} onChange={event=>setConfirmation(event.target.value)}>{passwordToggle}</AuthField><p className={dashboard?'barangay-auth__helper':'text-xs text-slate-500'}>Use at least 8 characters. Your account may require a stronger password.</p></>}
+            {dashboard?(mode==='login'&&<button type="button" disabled={busy} onClick={()=>changeMode('forgot')} className="barangay-auth__forgot">Forgot password?</button>):<div className="flex flex-wrap justify-between gap-3"><button type="button" disabled={busy} onClick={()=>setShowPassword(value=>!value)} className="text-sm text-emerald-700 font-semibold">{showPassword?'Hide password':'Show password'}</button>{mode==='login'&&<button type="button" disabled={busy} onClick={()=>changeMode('forgot')} className="text-sm font-semibold text-emerald-700">Forgot password?</button>}</div>}
+          </>}
+          {mode==='signup'&&<p className={dashboard?'barangay-auth__helper':'text-xs text-slate-500'}>{privacyAcceptance?'Terms accepted for sign-up. You will confirm again at first login.':'Review the terms and account-data consent before signing up.'} <button type="button" disabled={busy} onClick={()=>setPrivacyDialog('signup')} className="font-semibold text-emerald-700 underline">Review sign-up terms</button></p>}
+          <button disabled={busy||(mode==='forgot'&&cooldown>0)} className={dashboard?'barangay-auth__primary':'w-full rounded-2xl bg-emerald-600 py-4 font-bold text-white hover:bg-emerald-700 disabled:opacity-50'}>{busy?'Please wait…':mode==='signup'?'Sign Up':mode==='code'?'Verify reset code':mode==='forgot'?(cooldown?`Request again in ${cooldown}s`:'Send reset link'):'Log In'}{dashboard&&mode==='login'&&!busy&&<AuthIcon name="arrow"/>}</button>
+        </form>
+        {(mode==='forgot'||mode==='login')&&<button disabled={busy} onClick={()=>changeMode('code')} className={dashboard?'barangay-auth__recovery':'w-full text-sm font-semibold text-emerald-700 underline'}>Enter reset code</button>}
+        {mode==='login'?<>{dashboard&&<div className="barangay-auth__divider">New to SafeWatch?</div>}<button disabled={busy} onClick={()=>changeMode('signup')} className={dashboard?'barangay-auth__secondary':'w-full rounded-2xl border border-emerald-500 py-3 font-bold text-emerald-700'}>Create an account</button>
+          <button disabled={busy} onClick={()=>run(async()=>{await resendAccountConfirmation(client,email,window.location.origin);if(mounted.current)setMessage('Confirmation requested. Check your inbox and spam folder.');})} className={dashboard?'barangay-auth__confirmation':'w-full text-sm text-slate-500 underline'}>Resend confirmation email</button></>:<button disabled={busy} onClick={()=>changeMode('login')} className={dashboard?'barangay-auth__back':'w-full text-sm font-semibold text-emerald-700'}>Back to login</button>}
+        {dashboard?<p className="barangay-auth__personnel"><AuthIcon name="lock"/>For approved barangay personnel</p>:privacyLink}
+      </section>;
+  return <>{dashboard?<BarangayAuthLayout privacyLink={privacyLink}>{card}</BarangayAuthLayout>:<div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 md:p-10">
     <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-10 items-center">
       <div className="hidden lg:block space-y-6">
         <p className="text-4xl font-black tracking-tight text-emerald-700">SafeWatch</p>
-        <h1 className="text-4xl font-bold leading-tight text-slate-800">{dashboard?'Barangay Health Portal':'Family care, connected'}</h1>
-        <p className="text-lg text-slate-500">{dashboard?'Monitor seniors and respond to alerts with your approved barangay account.':'Keep up with your loved ones’ health, location and safety alerts.'}</p>
+        <h1 className="text-4xl font-bold leading-tight text-slate-800">Family care, connected</h1>
+        <p className="text-lg text-slate-500">Keep up with your loved ones’ health, location and safety alerts.</p>
       </div>
-      <section className="w-full max-w-md mx-auto bg-white border border-slate-100 rounded-[2rem] p-7 md:p-10 shadow-sm space-y-6">
-        <div><p className="font-black text-emerald-700 mb-3">SafeWatch · {dashboard?'Barangay':'Family'}</p>
-          <h2 className="text-3xl font-bold text-slate-800">{mode==='signup'?'Create your account':mode==='forgot'?'Forgot password?':mode==='code'?'Enter reset code':'Welcome back'}</h2>
-          <p className="mt-2 text-sm text-slate-500">{mode==='signup'?(dashboard?'Create your barangay account. New staff accounts require super-admin approval. Use a different email from your family account.':'Create a family account using a different email from your barangay account.'):mode==='forgot'?'Enter your account email to request a password-reset link.':mode==='code'?'Enter the 6-digit reset code from your newest password-reset email.':'Sign in with the account for this app.'}</p>
-        </div>
-        {error&&<p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
-        {message&&<p role="status" className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">{message}</p>}
-        <form onSubmit={submit} className="space-y-5">
-          {mode==='signup'&&<label className="block text-sm font-semibold text-slate-600">Full name<input autoComplete="name" required maxLength={100} disabled={busy} value={fullName} onChange={event=>setFullName(event.target.value)} className={inputClass}/></label>}
-          <label className="block text-sm font-semibold text-slate-600">Email address<input type="email" autoComplete={mode==='login'?'username':'email'} required maxLength={254} disabled={busy} value={email} onChange={event=>setEmail(event.target.value)} className={inputClass}/></label>
-          {mode==='code'&&<label className="block text-sm font-semibold text-slate-600">Reset code<input type="text" inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6} disabled={busy} value={resetCode} onChange={event=>setResetCode(event.target.value.replace(/\D/g,''))} className={inputClass}/></label>}
-          {mode!=='forgot'&&mode!=='code'&&<>
-            <label className="block text-sm font-semibold text-slate-600">Password<input type={showPassword?'text':'password'} autoComplete={mode==='signup'?'new-password':'current-password'} required minLength={mode==='signup'?8:undefined} disabled={busy} value={password} onChange={event=>setPassword(event.target.value)} className={inputClass}/></label>
-            {mode==='signup'&&<><label className="block text-sm font-semibold text-slate-600">Confirm password<input type={showPassword?'text':'password'} autoComplete="new-password" required disabled={busy} value={confirmation} onChange={event=>setConfirmation(event.target.value)} className={inputClass}/></label><p className="text-xs text-slate-500">Use at least 8 characters. Your account may require a stronger password.</p></>}
-            <div className="flex flex-wrap justify-between gap-3"><button type="button" disabled={busy} onClick={()=>setShowPassword(value=>!value)} className="text-sm text-emerald-700 font-semibold">{showPassword?'Hide password':'Show password'}</button>{mode==='login'&&<button type="button" disabled={busy} onClick={()=>changeMode('forgot')} className="text-sm font-semibold text-emerald-700">Forgot password?</button>}</div>
-          </>}
-          {mode==='signup'&&<p className="text-xs text-slate-500">{privacyAcceptance?'Terms accepted for sign-up. You will confirm again at first login.':'Review the terms and account-data consent before signing up.'} <button type="button" disabled={busy} onClick={()=>setPrivacyDialog('signup')} className="font-semibold text-emerald-700 underline">Review sign-up terms</button></p>}
-          <button disabled={busy||(mode==='forgot'&&cooldown>0)} className="w-full rounded-2xl bg-emerald-600 py-4 font-bold text-white hover:bg-emerald-700 disabled:opacity-50">{busy?'Please wait…':mode==='signup'?'Sign Up':mode==='code'?'Verify reset code':mode==='forgot'?(cooldown?`Request again in ${cooldown}s`:'Send reset link'):'Log In'}</button>
-        </form>
-        {(mode==='forgot'||mode==='login')&&<button disabled={busy} onClick={()=>changeMode('code')} className="w-full text-sm font-semibold text-emerald-700 underline">Enter reset code</button>}
-        {mode==='login'?<><button disabled={busy} onClick={()=>changeMode('signup')} className="w-full rounded-2xl border border-emerald-500 py-3 font-bold text-emerald-700">Create an account</button>
-          <button disabled={busy} onClick={()=>run(async()=>{await resendAccountConfirmation(client,email,window.location.origin);if(mounted.current)setMessage('Confirmation requested. Check your inbox and spam folder.');})} className="w-full text-sm text-slate-500 underline">Resend confirmation email</button></>:<button disabled={busy} onClick={()=>changeMode('login')} className="w-full text-sm font-semibold text-emerald-700">Back to login</button>}
-        <button type="button" disabled={busy} onClick={()=>setPrivacyDialog('read')} className="w-full text-xs font-semibold text-slate-500 underline">Terms and Conditions &amp; Privacy Notice</button>
-      </section>
+      {card}
     </div>
-  </div>{privacyDialog&&<PrivacyTermsDialog key={privacyDialog} readOnly={privacyDialog==='read'} stage="signup"
+  </div>}{privacyDialog&&<PrivacyTermsDialog key={privacyDialog} readOnly={privacyDialog==='read'} stage="signup"
     onDecline={()=>privacyDialog==='signup'?changeMode('login'):setPrivacyDialog(null)}
     onAccept={acceptance=>{setPrivacyAcceptance(acceptance);setPrivacyDialog(null);}}/>}</>;
 }

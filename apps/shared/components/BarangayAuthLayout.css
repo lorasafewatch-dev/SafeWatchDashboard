@@ -1,0 +1,221 @@
+.barangay-auth {
+  --auth-ink: #071b3d;
+  --auth-emerald: #007f68;
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  color: var(--auth-ink);
+  background: #d9e9d7;
+  font-family: 'Outfit', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.barangay-auth *, .barangay-auth *::before, .barangay-auth *::after { box-sizing: border-box; }
+.barangay-auth__background {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: linear-gradient(0deg, rgba(7, 57, 45, .61), transparent 25%), linear-gradient(180deg, rgba(243, 250, 235, .3), rgba(240, 250, 236, .05) 60%), url('../assets/barangay-monitoring-background.webp');
+  background-size: cover;
+  background-position: center;
+}
+.barangay-auth__shell {
+  width: 100%;
+  max-width: 1920px;
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: clamp(28px, 4.6vh, 48px) 3.9vw 8px 4.8vw;
+  display: flex;
+  flex-direction: column;
+}
+.barangay-auth__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-left: 20px; }
+.barangay-auth__brand { display: flex; align-items: center; gap: 15px; }
+.barangay-auth__brand-mark { width: 62px; height: 66px; color: #006f60; stroke-width: 1.65; flex: 0 0 auto; }
+.barangay-auth__wordmark { display: block; font-size: clamp(30px, 2.6vw, 42px); line-height: 1.03; font-weight: 750; letter-spacing: -1.6px; }
+.barangay-auth__brand-caption { display: block; margin-top: 5px; font-size: 12px; line-height: 1.4; font-weight: 650; letter-spacing: 2.5px; text-transform: uppercase; }
+.barangay-auth__tagline { margin: 7px 16px 0 0; color: #075748; font-size: 18px; font-weight: 500; }
+.barangay-auth__main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(400px, 536px); align-items: stretch; gap: 5.4vw; margin-top: 24px; }
+.barangay-auth__hero { display: flex; flex-direction: column; min-width: 0; padding: 10px 0 0 20px; }
+.barangay-auth__eyebrow { margin: 0 0 10px; color: #00755e; font-size: 16px; font-weight: 650; letter-spacing: 3.5px; text-transform: uppercase; }
+.barangay-auth__hero h1 { margin: 0; font-size: clamp(48px, 5.16vw, 82px); font-weight: 750; line-height: .96; letter-spacing: -.045em; }
+.barangay-auth__hero h1 span { color: #006750; white-space: nowrap; }
+.barangay-auth__description { margin: 15px 0 0; color: #274d45; font-size: clamp(19px, 1.65vw, 27px); line-height: 1.3; font-weight: 450; }
+.barangay-auth__previews { display: flex; gap: 12px; align-items: stretch; margin-top: auto; padding-top: 270px; margin-left: -15px; }
+.barangay-auth__preview { position: relative; overflow: hidden; width: 268px; height: 114px; border: 1px solid rgba(255, 255, 255, .95); border-radius: 17px; background: rgba(248, 255, 250, .91); box-shadow: 0 8px 28px rgba(4, 49, 36, .12); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.barangay-auth__preview-icon { position: absolute; top: 10px; left: 12px; z-index: 1; display: grid; place-items: center; width: 49px; height: 49px; color: #008774; background: #dcf8ef; border-radius: 50%; }
+.barangay-auth__preview-icon svg { width: 31px; height: 31px; }
+.barangay-auth__preview--health .barangay-auth__preview-icon { color: white; background: linear-gradient(145deg, #11b997, #00775e); box-shadow: 0 0 0 7px rgba(215, 249, 236, .85); width: 37px; height: 37px; top: 16px; left: 20px; }
+.barangay-auth__preview--health .barangay-auth__preview-icon svg { width: 27px; height: 27px; }
+.barangay-auth__preview-title { position: absolute; z-index: 1; left: 79px; top: 12px; font-size: 17px; font-weight: 500; white-space: nowrap; }
+.barangay-auth__waveform { position: absolute; bottom: 11px; left: 33px; width: calc(100% - 46px); height: 48px; color: #00856c; }
+.barangay-auth__map { position: absolute; width: 100%; height: 96px; bottom: -14px; opacity: .9; }
+.barangay-auth__features { display: flex; align-items: center; gap: 0; list-style: none; padding: 0; margin: 28px 0 7px; color: #fff; text-shadow: 0 1px 7px rgba(0, 38, 25, .48); }
+.barangay-auth__features li { display: flex; align-items: center; gap: 14px; padding: 0 27px; font-size: 15px; font-weight: 400; white-space: nowrap; }
+.barangay-auth__features li:first-child { padding-left: 0; }
+.barangay-auth__features li + li { border-left: 1px solid rgba(245, 255, 248, .62); }
+.barangay-auth__features svg { width: 38px; height: 38px; stroke-width: 1.55; flex-shrink: 0; }
+.barangay-auth__card { align-self: start; min-width: 0; width: 100%; padding: 31px 46px 29px; border: 1.5px solid rgba(255, 255, 255, .96); border-radius: 29px; background: rgba(246, 252, 242, .78); box-shadow: 0 18px 60px rgba(19, 61, 42, .09), inset 0 1px 0 rgba(255, 255, 255, .65); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+.barangay-auth__access { display: inline-flex; align-items: center; gap: 12px; min-height: 49px; padding: 0 17px 0 0; margin: 0 0 14px; border-radius: 999px; background: rgba(208, 247, 235, .71); color: #006c56; font-size: 15px; font-weight: 600; }
+.barangay-auth__access > span { display: grid; place-items: center; width: 51px; height: 51px; background: rgba(201, 242, 228, .72); border-radius: 18px; }
+.barangay-auth__access svg { width: 31px; height: 34px; }
+.barangay-auth__card h2 { margin: 0; color: var(--auth-ink); font-size: clamp(34px, 3.2vw, 51px); line-height: 1.1; font-weight: 700; letter-spacing: -.045em; }
+.barangay-auth__subtitle { margin: 6px 0 0; font-size: clamp(17px, 1.4vw, 22px); color: #5c7390; line-height: 1.3; }
+.barangay-auth__form { margin-top: 26px; display: flex; flex-direction: column; gap: 18px; }
+.barangay-auth__field > label { display: block; color: #0b2142; font-size: 17px; font-weight: 500; line-height: 1.3; }
+.barangay-auth__input-wrap { position: relative; display: flex; align-items: center; margin-top: 8px; }
+.barangay-auth__input-wrap > svg { position: absolute; left: 20px; width: 24px; height: 24px; color: #6a7f9a; pointer-events: none; }
+.barangay-auth__input { min-width: 0; width: 100%; height: 56px; padding: 0 49px 0 67px; border: 1px solid #c9d5e4; border-radius: 12px; background: rgba(250, 252, 255, .9); color: #132d43; font: inherit; font-size: 18px; outline: none; transition: border-color .18s, box-shadow .18s, background .18s; }
+.barangay-auth__input::placeholder { color: #7284a0; opacity: 1; }
+.barangay-auth__input:focus { border-color: #008770; background: #fff; box-shadow: 0 0 0 3px rgba(0, 135, 112, .13); }
+.barangay-auth__eye { position: absolute; display: grid; place-items: center; right: 9px; width: 39px; height: 40px; border: 0; border-radius: 9px; color: #637995; background: transparent; cursor: pointer; }
+.barangay-auth__eye svg { width: 24px; height: 24px; }
+.barangay-auth__eye:hover { background: #e9f2ed; color: #007c65; }
+.barangay-auth__forgot { align-self: flex-end; margin-top: -10px; color: #007c65; text-decoration: underline; text-underline-offset: 2px; font-size: 16px; font-weight: 500; cursor: pointer; }
+.barangay-auth__primary, .barangay-auth__secondary { display: flex; align-items: center; justify-content: center; gap: 14px; width: 100%; min-height: 56px; border-radius: 12px; font-family: inherit; font-size: 21px; font-weight: 650; cursor: pointer; transition: background .18s, box-shadow .18s, transform .18s; }
+.barangay-auth__primary { margin-top: 1px; border: 1px solid rgba(1, 127, 100, .25); background: linear-gradient(110deg, #008b73, #007c62); box-shadow: 0 7px 17px rgba(0, 118, 88, .13); color: #fff; }
+.barangay-auth__primary svg { width: 24px; height: 24px; }
+.barangay-auth__primary:hover:not(:disabled) { background: #006c56; box-shadow: 0 9px 23px rgba(0, 103, 77, .22); transform: translateY(-1px); }
+.barangay-auth__primary:active:not(:disabled), .barangay-auth__secondary:active:not(:disabled) { transform: translateY(0); }
+.barangay-auth__recovery, .barangay-auth__confirmation, .barangay-auth__back { display: block; width: fit-content; max-width: 100%; margin: 15px auto 0; padding: 2px 0; color: #00765e; font-size: 16px; font-weight: 450; line-height: 1.4; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.barangay-auth__divider { display: flex; align-items: center; gap: 18px; margin: 22px 0 14px; color: #647993; font-size: 16px; white-space: nowrap; }
+.barangay-auth__divider::before, .barangay-auth__divider::after { content: ''; flex: 1; height: 1px; background: #bbcbd9; }
+.barangay-auth__secondary { min-height: 51px; border: 1.5px solid #00866a; background: rgba(248, 255, 251, .23); color: #00745d; font-size: 20px; }
+.barangay-auth__secondary:hover:not(:disabled) { background: rgba(227, 250, 239, .85); }
+.barangay-auth__confirmation { margin-top: 14px; color: #617798; }
+.barangay-auth__personnel { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 26px 0 0; color: #607897; font-size: 14px; text-align: center; }
+.barangay-auth__personnel svg { width: 19px; height: 21px; flex-shrink: 0; }
+.barangay-auth__helper { margin: -7px 0 0; font-size: 13px; color: #446356; line-height: 1.5; }
+.barangay-auth__helper button { color: #006b53; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.barangay-auth__message { margin: 18px 0 -8px; padding: 12px 14px; border: 1px solid #b2decb; border-radius: 10px; background: #edf9f1; color: #205a42; font-size: 14px; line-height: 1.5; }
+.barangay-auth__message--error { border-color: #f3c8c8; background: #fff1f1; color: #9d2929; }
+.barangay-auth button:focus-visible { outline: 3px solid #006b58; outline-offset: 4px; }
+.barangay-auth button:disabled, .barangay-auth input:disabled { opacity: .55; cursor: not-allowed; }
+.barangay-auth__footer { padding-top: 23px; text-align: center; color: white; text-shadow: 0 1px 6px rgba(5, 46, 32, .42); }
+.barangay-auth__footer-line { display: flex; align-items: center; gap: 20px; font-size: 14px; }
+.barangay-auth__footer-line::before, .barangay-auth__footer-line::after { content: ''; flex: 1; height: 1px; background: rgba(237, 255, 243, .55); }
+.barangay-auth__privacy { display: inline-block; margin-top: 0; font: inherit; font-size: 11px; text-decoration: underline; text-underline-offset: 3px; color: #f2fff8; cursor: pointer; }
+
+@media (min-width: 1051px) and (max-height: 870px) {
+  .barangay-auth__shell { padding-top: 24px; padding-bottom: 13px; }
+  .barangay-auth__brand-mark { width: 49px; height: 55px; }
+  .barangay-auth__wordmark { font-size: 34px; }
+  .barangay-auth__main { margin-top: 17px; }
+  .barangay-auth__card { padding: 24px 34px; border-radius: 25px; }
+  .barangay-auth__access { min-height: 39px; margin-bottom: 13px; }
+  .barangay-auth__access > span { width: 40px; height: 40px; border-radius: 14px; }
+  .barangay-auth__access svg { width: 27px; height: 27px; }
+  .barangay-auth__card h2 { font-size: 39px; }
+  .barangay-auth__subtitle { font-size: 18px; }
+  .barangay-auth__form { margin-top: 22px; gap: 17px; }
+  .barangay-auth__input { height: 49px; font-size: 16px; }
+  .barangay-auth__field > label { font-size: 15px; }
+  .barangay-auth__primary { min-height: 50px; font-size: 19px; }
+  .barangay-auth__secondary { min-height: 46px; font-size: 18px; }
+  .barangay-auth__divider { margin: 16px 0 12px; font-size: 14px; }
+  .barangay-auth__recovery, .barangay-auth__confirmation { margin-top: 11px; font-size: 14px; }
+  .barangay-auth__forgot { font-size: 14px; }
+  .barangay-auth__personnel { margin-top: 18px; font-size: 12px; }
+  .barangay-auth__previews { padding-top: 170px; }
+  .barangay-auth__features { margin-top: 23px; }
+  .barangay-auth__features li { gap: 9px; padding: 0 18px; font-size: 13px; }
+  .barangay-auth__features svg { width: 30px; height: 30px; }
+  .barangay-auth__footer { padding-top: 24px; }
+}
+@media (min-width: 1051px) and (max-width: 1350px) {
+  .barangay-auth__main { grid-template-columns: minmax(0, 1fr) 420px; gap: 38px; }
+  .barangay-auth__hero, .barangay-auth__header { padding-left: 0; }
+  .barangay-auth__eyebrow { font-size: 13px; letter-spacing: 2.8px; }
+  .barangay-auth__hero h1 { font-size: 4.9vw; }
+  .barangay-auth__description { font-size: 20px; }
+  .barangay-auth__previews { margin-left: 0; gap: 10px; }
+  .barangay-auth__preview { width: 230px; height: 104px; }
+  .barangay-auth__preview-title { left: 65px; font-size: 14px; }
+  .barangay-auth__preview-icon { left: 10px; width: 42px; height: 42px; }
+  .barangay-auth__features li { gap: 8px; padding: 0 15px; font-size: 12px; }
+  .barangay-auth__features svg { width: 29px; height: 29px; }
+}
+@media (min-width: 1051px) and (max-height: 760px) {
+  .barangay-auth__shell { padding-top: 14px; padding-bottom: 8px; }
+  .barangay-auth__brand-mark { width: 43px; height: 46px; }
+  .barangay-auth__wordmark { font-size: 29px; }
+  .barangay-auth__brand-caption { font-size: 10px; }
+  .barangay-auth__main { margin-top: 12px; }
+  .barangay-auth__card { padding: 20px 28px; }
+  .barangay-auth__access { min-height: 33px; margin-bottom: 12px; font-size: 12px; }
+  .barangay-auth__access > span { width: 34px; height: 34px; border-radius: 12px; }
+  .barangay-auth__access svg { width: 24px; height: 24px; }
+  .barangay-auth__card h2 { font-size: 34px; }
+  .barangay-auth__subtitle { font-size: 16px; }
+  .barangay-auth__form { margin-top: 18px; gap: 13px; }
+  .barangay-auth__field > label { font-size: 14px; }
+  .barangay-auth__input { height: 44px; font-size: 15px; }
+  .barangay-auth__input-wrap { margin-top: 6px; }
+  .barangay-auth__input-wrap > svg { width: 21px; height: 21px; }
+  .barangay-auth__primary { min-height: 44px; font-size: 17px; }
+  .barangay-auth__secondary { min-height: 43px; font-size: 17px; }
+  .barangay-auth__forgot { font-size: 12px; margin-top: -4px; }
+  .barangay-auth__recovery, .barangay-auth__confirmation { font-size: 12px; margin-top: 9px; }
+  .barangay-auth__divider { font-size: 12px; margin: 13px 0 10px; }
+  .barangay-auth__personnel { font-size: 11px; margin-top: 16px; }
+  .barangay-auth__previews { padding-top: 120px; }
+  .barangay-auth__features { margin-top: 22px; }
+  .barangay-auth__footer { padding-top: 7px; }
+}
+@media (max-width: 1050px) {
+  .barangay-auth__background { background-position: 37% center; }
+  .barangay-auth__background::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(238, 250, 238, .55), rgba(238, 250, 238, .2) 60%, rgba(0, 55, 38, .16)); }
+  .barangay-auth__shell { max-width: 700px; padding: 28px 30px 20px; }
+  .barangay-auth__header { padding: 0; }
+  .barangay-auth__brand-mark { width: 47px; height: 54px; }
+  .barangay-auth__wordmark { font-size: 32px; }
+  .barangay-auth__brand-caption { font-size: 10px; letter-spacing: 1.8px; }
+  .barangay-auth__tagline { display: none; }
+  .barangay-auth__main { grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 32px; }
+  .barangay-auth__hero { padding: 0; }
+  .barangay-auth__eyebrow { font-size: 12px; letter-spacing: 2.8px; }
+  .barangay-auth__hero h1 { font-size: clamp(37px, 7vw, 58px); }
+  .barangay-auth__description { font-size: 19px; margin-top: 14px; }
+  .barangay-auth__previews { display: none; }
+  .barangay-auth__features { margin: 24px 0 0; color: #075342; text-shadow: 0 1px 8px #fff; }
+  .barangay-auth__features li { gap: 8px; padding: 0 18px; font-size: 13px; }
+  .barangay-auth__features li + li { border-color: #76a58d; }
+  .barangay-auth__features svg { width: 29px; height: 29px; }
+  .barangay-auth__card { max-width: 536px; margin: 0 auto; padding: 30px 34px; background: rgba(246, 252, 242, .9); }
+  .barangay-auth__card h2 { font-size: 41px; }
+  .barangay-auth__subtitle { font-size: 18px; }
+  .barangay-auth__footer { padding-top: 28px; }
+}
+@media (max-width: 540px) {
+  .barangay-auth__shell { padding: 23px 18px 18px; }
+  .barangay-auth__brand { gap: 10px; }
+  .barangay-auth__brand-mark { width: 43px; height: 49px; }
+  .barangay-auth__wordmark { font-size: 29px; }
+  .barangay-auth__brand-caption { font-size: 9px; letter-spacing: 1.4px; }
+  .barangay-auth__main { margin-top: 26px; gap: 22px; }
+  .barangay-auth__hero h1 { font-size: clamp(31px, 8.7vw, 46px); letter-spacing: -.045em; }
+  .barangay-auth__eyebrow { font-size: 10px; letter-spacing: 2px; }
+  .barangay-auth__description { font-size: 16px; }
+  .barangay-auth__features { margin-top: 19px; justify-content: space-between; }
+  .barangay-auth__features li { padding: 0 9px; gap: 5px; font-size: 10px; }
+  .barangay-auth__features li:last-child { padding-right: 0; }
+  .barangay-auth__features svg { width: 22px; height: 25px; }
+  .barangay-auth__card { padding: 25px 23px; border-radius: 23px; }
+  .barangay-auth__access { min-height: 40px; margin-bottom: 16px; font-size: 13px; gap: 9px; }
+  .barangay-auth__access > span { width: 42px; height: 42px; border-radius: 15px; }
+  .barangay-auth__access svg { width: 27px; height: 29px; }
+  .barangay-auth__card h2 { font-size: 36px; }
+  .barangay-auth__subtitle { font-size: 16px; }
+  .barangay-auth__form { margin-top: 24px; gap: 19px; }
+  .barangay-auth__field > label { font-size: 14px; }
+  .barangay-auth__input { height: 52px; font-size: 16px; padding-left: 51px; }
+  .barangay-auth__input-wrap > svg { left: 16px; width: 21px; height: 21px; }
+  .barangay-auth__primary { min-height: 53px; font-size: 18px; }
+  .barangay-auth__secondary { font-size: 18px; }
+  .barangay-auth__forgot, .barangay-auth__recovery, .barangay-auth__confirmation, .barangay-auth__divider { font-size: 14px; }
+  .barangay-auth__personnel { font-size: 12px; margin-top: 22px; }
+  .barangay-auth__footer-line { gap: 10px; font-size: 11px; }
+  .barangay-auth__privacy { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .barangay-auth button, .barangay-auth input { transition: none; }
+}
