@@ -54,7 +54,7 @@ export default function AccountSettings({ client, user: accountUser, permission,
     setProfileError(''); setProfileMessage(''); setEditing(true);
   };
 
-  return <div className="p-5 md:p-8 grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1 overflow-y-auto items-start">
+  return <div className="admin-settings p-5 md:p-8 grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1 overflow-y-auto items-start">
     <section aria-labelledby="account-profile-title" className="bg-white p-6 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-6">
       <div className="flex items-center gap-5"><div className="p-4 bg-emerald-50 text-emerald-600 rounded-3xl"><Users className="w-8 h-8" /></div>
         <div><h3 id="account-profile-title" className="text-xl font-bold text-slate-800">Profile Information</h3><p className="mt-1 text-sm text-slate-500">View and update your personal information.</p></div>

@@ -11,6 +11,8 @@ import L from 'leaflet';
 import { SENIOR_AVATAR } from '../../shared/avatar.js';
 import { createSeniorMarker } from '../../shared/mapMarker.js';
 import {
+  Menu,
+  X as CloseMenu,
   LayoutDashboard,
   Users,
   MapPin,
@@ -20,25 +22,15 @@ import {
   Settings,
   HelpCircle,
   Search,
-  Filter,
   Eye,
-  EyeOff,
-  User,
-  Lock,
   Battery,
   Calendar,
   Clock,
-  MoreVertical,
-  ChevronLeft,
   ChevronRight,
   Shield,
-  Maximize2,
   RefreshCw,
-  Sun,
   LogOut,
   Activity,
-  Heart,
-  Home,
   Plus,
   X,
   Map,
@@ -48,6 +40,9 @@ import {
 import { getDashboardClient, verifyDashboardPassword } from './supabaseClient.js';
 import AccountSettings from './components/AccountSettings.jsx';
 import StatCard from './components/StatCard.jsx';
+import { AdminOverview, ReadingLabel } from './components/AdminNatureUI.jsx';
+import { monitoringSummary, readingText, watchUpdate } from './adminPresentation.js';
+import './admin-nature.css';
 import useAccountSession from '../../shared/components/useAccountSession.js';
 import AccountMfaGate from '../../shared/components/AccountMfaGate.jsx';
 import AuthEntry from '../../shared/components/AuthEntry.jsx';
@@ -89,7 +84,7 @@ const SidebarItem = ({ icon: Icon, label, active, badge, onClick }) => (
     className={`sidebar-item ${active ? 'sidebar-item-active' : 'sidebar-item-default'}`}
   >
     <div className="flex items-center gap-3">
-      <Icon className={`w-[18px] h-[18px] ${active ? 'text-white' : 'text-gray-400'}`} />
+      <Icon className="w-[18px] h-[18px]" />
       <span>{label}</span>
     </div>
     {badge && (
@@ -100,9 +95,9 @@ const SidebarItem = ({ icon: Icon, label, active, badge, onClick }) => (
 
 const PolygonWithLegend = ({ positions, name }) => (
   <>
-    <Polygon positions={positions} pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.1, weight: 2 }} />
-    <div className="absolute bottom-8 left-4 z-[1000] pointer-events-none bg-white px-4 py-2 rounded-xl shadow-lg border border-slate-50 flex items-center gap-2">
-      <div className="w-2.5 h-2.5 bg-blue-500 rounded-full"></div>
+    <Polygon positions={positions} pathOptions={{ color: '#009a78', fillColor: '#009a78', fillOpacity: 0.1, weight: 2 }} />
+    <div className="admin-zone-label absolute bottom-8 left-4 z-[1000] pointer-events-none bg-white px-4 py-2 rounded-xl shadow-lg border border-slate-50 flex items-center gap-2">
+      <div className="w-2.5 h-2.5 bg-emerald-600 rounded-full"></div>
       <span className="text-[10px] font-bold text-slate-500">{name}</span>
     </div>
   </>
@@ -113,6 +108,17 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const { isLoggedIn, isLoadingAuth, userId, accountUser, accountPermission, pendingAccess, accessDenied, recoveryAccess, recoveryLink, authLinkError, authNotice, setAuthNotice, authError, retryAuth, privacyRequired, privacyError } = useAccountSession(supabase, 'dashboard');
   const [confirmingAlerts, setConfirmingAlerts] = useState(false);
   const [activeTab, setActiveTab] = useState('Dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [alertSearch, setAlertSearch] = useState('');
+  const contentRef = React.useRef(null);
+  const navigate = page => { setActiveTab(page); setSidebarOpen(false); };
+  useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [activeTab]);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const close = event => { if (event.key === 'Escape') setSidebarOpen(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [sidebarOpen]);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [logoutError, setLogoutError] = useState('');
@@ -134,7 +140,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [mapStyle, setMapStyle] = useState('standard');
   const [mapSearch, setMapSearch] = useState('');
   const [zoneSearch, setZoneSearch] = useState('');
-  const [dismissedAlerts, setDismissedAlerts] = useState(new Set());
+  const [dismissedAlerts] = useState(new Set());
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
@@ -246,8 +252,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     }
   }, [soundStorageKey]);
 
-  const timeStr = liveTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const dateStr = liveTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = liveTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Manila' });
 
   const [trustedLocations, setTrustedLocations] = useState([
     { id: 1, name: "Relative's House", lat: 14.044, lng: 121.132, radius: 100, label: "Trusted Zone" }
@@ -353,9 +358,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             age: device.age ?? (device.device_name?.split(' (')[2]?.replace(')', '').replace(' [MUTED]', '').trim() || '--'),
             gender: gender,
             status: zoneStatus,
-            pulse: latestTelemetry ? latestTelemetry.heart_rate : 0,
-            spo2: latestTelemetry ? latestTelemetry.spo2 : 0,
-            battery: latestTelemetry ? latestTelemetry.battery_percent : 0,
+            pulse: latestTelemetry?.heart_rate ?? null,
+            spo2: latestTelemetry?.spo2 ?? null,
+            battery: latestTelemetry?.battery_percent ?? null,
             rssi: Number.isFinite(latestTelemetry?.rssi_dbm) ? latestTelemetry.rssi_dbm : null,
             snr: Number.isFinite(latestTelemetry?.snr_db) ? latestTelemetry.snr_db : null,
             location: hasGpsLock ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'No current GPS fix',
@@ -565,206 +570,44 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     const outsideSeniorsCount = seniors.filter(s => s.hasGpsLock && !s.insideSafeZone && !s.insideTrustedZone).length;
     const activeAlertsCount = visibleAlerts.length.toString().padStart(2, '0');
 
-    const allVitalsNormal = seniors.length === 0 || seniors.every(s => s.spo2 >= 95 && s.pulse >= 60 && s.pulse <= 100);
-    const healthStatusStr = allVitalsNormal ? "Good" : "Warning";
-    const healthStatusColor = allVitalsNormal ? "text-[#4a7c59]" : "text-orange-600";
-    const healthStatusBg = allVitalsNormal ? "bg-[#e8f5e9]" : "bg-orange-50";
-    const healthStatusText = allVitalsNormal ? "All vitals normal" : "Check vitals";
-
-    const avgPulse = seniors.length > 0 ? Math.round(seniors.reduce((acc, s) => acc + s.pulse, 0) / seniors.length).toString() : "0";
-    const avgSpo2 = seniors.length > 0 ? Math.round(seniors.reduce((acc, s) => acc + s.spo2, 0) / seniors.length).toString() + "%" : "0%";
+    const summary = monitoringSummary(seniors, liveTime.getTime());
+    const allVitalsNormal = summary.health === 'In range';
+    const healthStatusStr = summary.health;
+    const healthStatusColor = allVitalsNormal ? 'text-emerald-700' : 'text-slate-700';
+    const healthStatusBg = allVitalsNormal ? 'bg-emerald-50' : 'bg-slate-100';
+    const healthStatusText = summary.healthDetail;
+    const avgPulse = summary.pulse ?? '—';
+    const avgSpo2 = summary.spo2 === null ? '—' : summary.spo2 + '%';
 
     if (activeTab === 'Dashboard') {
-      return (
-        <div className="p-8 space-y-6 tab-content">
-          {/* Welcome Banner */}
-          <div className="gradient-banner p-8 text-white animate-enter">
-            <div className="relative z-10 flex justify-between items-center">
-              <div>
-                <p className="text-white/60 text-sm font-medium mb-1">Welcome back,</p>
-                <h2 className="text-2xl font-bold tracking-tight">{familyProfileFromUser(accountUser).fullName || 'Barangay Health Worker'}</h2>
-                <p className="text-white/50 text-sm mt-1">San Isidro East, Malvar, Batangas</p>
-              </div>
-              <div className="text-right">
-                <p className="text-3xl font-bold tabular-nums tracking-tight">{timeStr}</p>
-                <p className="text-white/50 text-sm">{dateStr}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Top Stats Row */}
-          <div className="grid grid-cols-4 gap-5">
-            <div className="animate-enter animate-enter-d1"><StatCard icon={Users} value={totalSeniors} label="Seniors Monitored" subtext="View Seniors" color="text-[#4a7c59]" iconBg="bg-[#e8f5e9]" signal={parseInt(totalSeniors) > 0 ? 100 : 0} /></div>
-            <div className="animate-enter animate-enter-d2"><StatCard icon={MapPin} value={safeSeniorsCount} label="Inside Safe Zone" subtext="View Map" color="text-[#4a7c59]" iconBg="bg-[#e8f5e9]" signal={parseInt(totalSeniors) > 0 ? (parseInt(safeSeniorsCount) / parseInt(totalSeniors)) * 100 : 0} /></div>
-            <div className="animate-enter animate-enter-d3"><StatCard icon={Bell} value={activeAlertsCount} label="Active Alerts" subtext="Require Attention" color={activeAlertsCount !== "00" ? "text-red-600" : "text-[#4a7c59]"} iconBg={activeAlertsCount !== "00" ? "bg-red-50" : "bg-[#e8f5e9]"} signal={activeAlertsCount === "00" ? 100 : Math.max(0, 100 - (parseInt(activeAlertsCount) * 20))} /></div>
-            <div className="animate-enter animate-enter-d4"><StatCard icon={HeartPulse} value={healthStatusStr} label="Health Status" subtext={healthStatusText} color={healthStatusColor} iconBg={healthStatusBg} signal={allVitalsNormal ? 100 : 40} /></div>
-          </div>
-
-          {/* 2-Column Grid */}
-          <div className="grid grid-cols-12 gap-6">
-            {/* Live Location Map */}
-            <div className="col-span-8 card overflow-hidden flex flex-col h-[480px] relative">
-              <div className="px-6 py-4 border-b border-[#e2e8d8]/50 flex justify-between items-center bg-white/50 backdrop-blur-md z-10">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-gray-800">Live Location Map</h3>
-                  <div className="live-dot"></div>
-                </div>
-                <button onClick={() => setActiveTab('Live Location')} className="text-xs font-bold text-[#4a7c59] bg-[#4a7c59]/10 px-3 py-1.5 rounded-lg hover:bg-[#4a7c59]/20 transition-colors flex items-center gap-1"><Maximize2 className="w-3 h-3" /> Expand Map</button>
-              </div>
-              <div className="flex-1 relative z-0">
-                <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
-                  <SafeWatchTiles />
-                  <MapNavigation bounds={sanIsidroEastGeofence} />
-                  <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
-                  {trustedLocations.map(loc => (
-                    <Circle key={loc.id} center={[loc.lat, loc.lng]} radius={loc.radius} pathOptions={{ color: '#4a7c59', fillColor: '#4a7c59', fillOpacity: 0.15, weight: 2, dashArray: '5, 10' }} />
-                  ))}
-                  {seniors.filter(senior => senior.hasGpsLock).map(senior => (
-                    <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)} />
-                  ))}
-                </MapContainer>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 backdrop-blur px-5 py-2 rounded-full shadow-lg border border-white/50 flex items-center gap-5">
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-[#4a7c59] rounded-full shadow-[0_0_8px_#4a7c59]"></div><span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Safe Zone</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_#3b82f6]"></div><span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Trusted</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_8px_#ef4444]"></div><span className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Outside</span></div>
-                </div>
-              </div>
-            </div>
-
-            {/* Critical Alerts Panel */}
-            <div className="col-span-4 card overflow-hidden flex flex-col">
-              <div className="px-6 py-4 border-b border-[#e2e8d8] flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-gray-800">Critical Alerts Panel</h3>
-                  {sosAlerts.filter(a => !dismissedAlerts.has(a.id)).length > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">
-                      {sosAlerts.filter(a => !dismissedAlerts.has(a.id)).length}
-                    </span>
-                  )}
-                </div>
-                <button
-                  data-confirm-alert disabled={confirmingAlerts}
-                  onClick={handleDismissAllDB}
-                  className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  Dismiss All
-                </button>
-              </div>
-              <div className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[360px]">
-                {sosAlerts.filter(a => !dismissedAlerts.has(a.id)).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-32 text-center">
-                    <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center mb-2">
-                      <Shield className="w-5 h-5 text-green-500" />
-                    </div>
-                    <p className="text-sm font-medium text-gray-500">All Clear</p>
-                    <p className="text-xs text-gray-400">No active alerts</p>
-                  </div>
-                ) : (
-                  sosAlerts.filter(a => !dismissedAlerts.has(a.id)).map(alert => (
-                    <div key={alert.id} className={`p-4 rounded-xl border ${
-                      alert.rawType === 'SOS' ? 'border-red-200 bg-red-50/50' :
-                      alert.rawType === 'GEOFENCE' ? 'border-orange-200 bg-orange-50/50' :
-                      'border-yellow-200 bg-yellow-50/50'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className={`w-2 h-2 rounded-full animate-pulse ${
-                          alert.rawType === 'SOS' ? 'bg-red-500' : 'bg-orange-400'
-                        }`}></div>
-                        <span className={`badge ${
-                          alert.rawType === 'SOS' ? 'badge-red' : 'badge-orange'
-                        }`}>{alert.rawType === 'SOS' ? '🚨 SOS' : '⚠️ Geofence'}</span>
-                        <span className="text-[10px] text-gray-400 ml-auto">{alert.time}</span>
-                      </div>
-                      <p className="text-sm font-semibold text-gray-800 mb-1">{alert.seniorName}</p>
-                      <p className="text-xs text-gray-400 mb-3">
-                        {alert.rawType === 'SOS' ? '🔴 SOS button pressed — immediate attention required!' :
-                         '📍 Senior moved outside the safe zone boundary'}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setSelectedAlert(alert)}
-                          className="btn-outline !py-1.5 !px-3 !text-xs flex-1"
-                        >View Details</button>
-                        <button
-                          data-confirm-alert disabled={confirmingAlerts}
-                          onClick={() => handleDismissAlertDB(alert)}
-                          className="btn-outline !py-1.5 !px-3 !text-xs flex-1 !text-gray-400 hover:!text-red-500"
-                        >Dismiss</button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Row: Monitored Seniors List */}
-          <div className="card overflow-hidden">
-            <div className="px-6 py-4 border-b border-[#e2e8d8] flex justify-between items-center">
-              <h3 className="text-sm font-semibold text-gray-800">Monitored Seniors</h3>
-              <button onClick={() => setActiveTab('Senior Monitoring')} className="text-xs font-medium text-[#4a7c59] hover:underline">View All →</button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead><tr className="bg-[#f7f9f4]">
-                  <th className="table-header">Senior</th>
-                  <th className="table-header">Status</th>
-                  <th className="table-header">Pulse</th>
-                  <th className="table-header">SpO2</th>
-                  <th className="table-header">Battery</th>
-                  <th className="table-header">LoRa (last packet)</th>
-                  <th className="table-header">Last Update</th>
-                </tr></thead>
-                <tbody className="divide-y divide-[#e2e8d8]/50">
-                  {seniors.map(senior => (
-                    <tr key={senior.id} className="hover:bg-[#f7f9f4]/50 transition-colors">
-                      <td className="table-cell">
-                        <div className="flex items-center gap-3">
-                          <img src={SENIOR_AVATAR} className="w-9 h-9 rounded-full bg-[#f7f9f4]" alt={senior.name} />
-                          <div>
-                            <p className="font-semibold text-gray-800 text-sm">{senior.name}</p>
-                            <p className="text-[10px] text-gray-400">{senior.age}y • {senior.gender}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="table-cell"><span className={`badge ${senior.type === 'trusted' ? 'badge-blue' : ['sos', 'outside'].includes(senior.type) ? 'badge-red' : senior.type === 'normal' ? 'badge-green' : 'badge-orange'}`}>{senior.status}</span></td>
-                      <td className="table-cell"><span className="font-semibold">{senior.pulse}</span> <span className="text-gray-400 text-xs">bpm</span></td>
-                      <td className="table-cell"><span className="font-semibold">{senior.spo2}</span><span className="text-gray-400 text-xs">%</span></td>
-                      <td className="table-cell">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-gray-100"><div className={`h-full rounded-full ${senior.battery < 20 ? 'bg-red-400' : 'bg-[#4a7c59]'}`} style={{width:`${senior.battery}%`}}></div></div>
-                          <span className={`text-xs font-medium ${senior.battery < 20 ? 'text-red-500' : 'text-gray-600'}`}>{senior.battery}%</span>
-                        </div>
-                      </td>
-                      <td className="table-cell text-xs" title="Signal measured by the gateway for the last received packet; it is not a live connection reading.">
-                        {senior.rssi !== null && senior.snr !== null ? (
-                          <><p className="font-semibold text-slate-700">RSSI {senior.rssi.toFixed(1)} dBm</p><p className="text-slate-500">SNR {senior.snr.toFixed(1)} dB</p></>
-                        ) : <span className="text-gray-400">No measurement</span>}
-                      </td>
-                      <td className="table-cell text-xs text-gray-400">{senior.time}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      );
+      return <AdminOverview seniors={seniors} alerts={visibleAlerts} now={liveTime.getTime()}
+        onNavigate={navigate} onDetails={setSelectedAlert} onConfirm={handleDismissAlertDB} confirming={confirmingAlerts}
+        onLocate={senior => { setSelectedSeniorLoc([senior.lat, senior.lng]); navigate('Live Location'); }}>
+        <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
+          <SafeWatchTiles /><MapNavigation bounds={sanIsidroEastGeofence} />
+          <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
+          {trustedLocations.map(loc => <Circle key={loc.id} center={[loc.lat, loc.lng]} radius={loc.radius} pathOptions={{ color: '#3492b0', fillColor: '#3492b0', fillOpacity: 0.1, weight: 2, dashArray: '5, 10' }} />)}
+          {seniors.filter(senior => senior.hasGpsLock).map(senior => <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)}>
+            <Popup><strong>{senior.name}</strong><br/>{senior.status}<br/>Updated {watchUpdate(senior, liveTime.getTime()).label}</Popup>
+          </Marker>)}
+        </MapContainer>
+        <div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Trusted hub</span></div>
+      </AdminOverview>;
     } else if (activeTab === 'Senior Monitoring') {
       const filteredSeniors = seniors.filter(s => {
-        const matchesName = s.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesName = (s.name || '').toLowerCase().includes(searchQuery.trim().toLowerCase());
         const matchesStatus = statusFilter === 'All Status' || s.status === statusFilter;
         return matchesName && matchesStatus;
       });
 
       return (
-        <div className="p-8 space-y-8 flex-1 overflow-y-auto">
+        <div className="admin-page admin-seniors">
           {/* Stats Grid */}
           <div className="grid grid-cols-4 gap-6">
             <StatCard icon={Users} value={totalSeniors} label="Seniors Monitored" subtext="View All Seniors" color="text-emerald-600" iconBg="bg-emerald-100" signal={parseInt(totalSeniors) > 0 ? 100 : 0} />
             <StatCard icon={MapPin} value={safeSeniorsCount} label="Inside Safe Zone" subtext="Inside Safe Zone" color="text-blue-600" iconBg="bg-blue-100" signal={parseInt(totalSeniors) > 0 ? (parseInt(safeSeniorsCount) / parseInt(totalSeniors)) * 100 : 0} />
             <StatCard icon={Bell} value={activeAlertsCount} label="Active Alerts" subtext="View Alerts" color="text-orange-600" iconBg="bg-orange-100" signal={activeAlertsCount === "00" ? 100 : Math.max(0, 100 - (parseInt(activeAlertsCount) * 20))} />
-            <StatCard icon={HeartPulse} value={healthStatusStr} label="Overall Health Status" subtext={healthStatusText} color={healthStatusColor} iconBg={healthStatusBg} signal={allVitalsNormal ? 100 : 40} />
+            <StatCard icon={HeartPulse} value={healthStatusStr} label="Overall Health Status" subtext={healthStatusText} color={healthStatusColor} iconBg={healthStatusBg} signal={summary.health === 'Awaiting data' ? 0 : allVitalsNormal ? 100 : 40} />
           </div>
 
           {/* Table Section */}
@@ -773,9 +616,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <div className="flex items-center gap-3 flex-1 max-w-lg">
                 <div className="relative flex-1">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input type="text" placeholder="Search senior by name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field !pl-10" />
+                  <input aria-label="Search seniors" type="text" placeholder="Search senior by name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field !pl-10" />
                 </div>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field !w-auto">
+                <select aria-label="Filter seniors by location status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field !w-auto">
                   <option value="All Status">All Status</option>
                   <option value="Inside Safe Zone">Inside Safe Zone</option>
                   <option value="Trusted Location">Trusted Location</option>
@@ -785,10 +628,6 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </select>
               </div>
               <div className="flex items-center gap-3">
-                <button className="btn-outline flex items-center gap-2">
-                  <Filter className="w-4 h-4" />
-                  Filter
-                </button>
                 <button
                   onClick={() => setIsAddingSenior(true)}
                   className="btn-primary flex items-center gap-2"
@@ -836,15 +675,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                         </span>
                       </td>
                       <td className="table-cell">
-                        <p className={`font-bold ${senior.pulse < 60 ? 'text-red-500' : 'text-emerald-500'}`}>{senior.pulse} bpm</p>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${senior.pulse < 60 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>{senior.pulse < 60 ? 'Low' : 'Good'}</span>
+                        <p className="font-semibold text-slate-700">{readingText(senior, 'pulse', ' bpm')}</p>
+                        <span><ReadingLabel senior={senior} field="pulse" now={liveTime.getTime()} /></span>
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center gap-1.5">
                           <Battery className={`w-4 h-4 ${senior.battery < 20 ? 'text-red-500 rotate-180' : 'text-emerald-500'}`} />
-                          <p className="font-bold text-slate-600">{senior.battery}%</p>
+                          <p className="font-bold text-slate-600">{readingText(senior, 'battery', '%')}</p>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${senior.battery < 20 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>{senior.battery < 20 ? 'Low' : 'Good'}</span>
+                        <span><ReadingLabel senior={senior} field="battery" now={liveTime.getTime()} /></span>
                       </td>
                       <td className="table-cell">
                         <p className="font-medium text-slate-600 leading-tight">{senior.location.split(',')[0]}</p>
@@ -867,6 +706,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </td>
                     </tr>
                   ))}
+                {!filteredSeniors.length && <tr><td colSpan={9}><div className="admin-table-empty">No seniors match the current search and status filter.</div></td></tr>}
                 </tbody>
               </table>
             </div>
@@ -875,7 +715,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       );
     } else if (activeTab === 'Live Location') {
       return (
-        <div className="flex-1 flex overflow-hidden p-6 gap-6 relative">
+        <div className="admin-page admin-location">
           {/* Interactive Sidebar */}
           <div className="w-80 flex flex-col gap-4 z-10 animate-enter">
             <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white flex flex-col gap-4 shrink-0">
@@ -903,11 +743,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5 text-slate-500 font-medium">
                       <Battery className={`w-3.5 h-3.5 ${senior.battery < 20 ? 'text-red-500' : 'text-[#4a7c59]'}`} />
-                      {senior.battery}%
+                      {readingText(senior, 'battery', '%')}
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-500 font-medium">
                       <HeartPulse className="w-3.5 h-3.5 text-red-400" />
-                      {senior.pulse} bpm
+                      {readingText(senior, 'pulse', ' bpm')}
                     </div>
                     <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-[#4a7c59] group-hover:text-white transition-colors">
                       <MapPin className="w-3 h-3" />
@@ -949,13 +789,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       );
     } else if (activeTab === 'Health Overview') {
       return (
-        <div className="p-8 space-y-8 flex-1 overflow-y-auto">
+        <div className="admin-page admin-health">
           {/* Health Summary Row */}
           <div className="grid grid-cols-4 gap-6">
-            <StatCard icon={HeartPulse} value={avgPulse} label="Avg. Pulse Rate" subtext="Across all seniors" color="text-purple-600" iconBg="bg-purple-100" signal={parseInt(avgPulse) >= 60 && parseInt(avgPulse) <= 100 ? 100 : 50} />
-            <StatCard icon={Activity} value={avgSpo2} label="Avg. Blood Oxygen" subtext="Stable status" color="text-emerald-600" iconBg="bg-emerald-100" signal={parseInt(avgSpo2) >= 95 ? 100 : parseInt(avgSpo2) >= 90 ? 70 : 30} />
+            <StatCard icon={HeartPulse} value={avgPulse} label="Avg. Pulse Rate" subtext="Current available readings" color="text-purple-600" iconBg="bg-purple-100" signal={summary.pulse === null ? 0 : summary.pulse >= 60 && summary.pulse <= 100 ? 100 : 50} />
+            <StatCard icon={Activity} value={avgSpo2} label="Avg. Blood Oxygen" subtext="Current available readings" color="text-emerald-600" iconBg="bg-emerald-100" signal={summary.spo2 === null ? 0 : summary.spo2 >= 95 ? 100 : summary.spo2 >= 90 ? 70 : 30} />
             <StatCard icon={Bell} value={activeAlertsCount} label="Critical Alerts" subtext="Active now" color="text-red-600" iconBg="bg-red-100" signal={activeAlertsCount === "00" ? 100 : Math.max(0, 100 - (parseInt(activeAlertsCount) * 20))} />
-            <StatCard icon={Shield} value="100%" label="Uptime Status" subtext="Device connectivity" color="text-blue-600" iconBg="bg-blue-100" signal={100} />
+            <StatCard icon={Shield} value={summary.online + "/" + seniors.length} label="Watches reporting" subtext="Packet received in the last 45s" color="text-blue-600" iconBg="bg-blue-100" signal={seniors.length ? summary.online / seniors.length * 100 : 0} />
           </div>
 
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -984,22 +824,22 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </td>
                       <td className="table-cell">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-lg font-black text-slate-800">{senior.pulse}</span>
-                          <span className="text-[10px] font-bold text-emerald-500 uppercase">Normal</span>
+                          <span className="text-lg font-black text-slate-800">{readingText(senior, 'pulse')}</span>
+                          <ReadingLabel senior={senior} field="pulse" now={liveTime.getTime()} />
                         </div>
                       </td>
                       <td className="table-cell">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-lg font-black text-slate-800">{senior.spo2}</span>
-                          <span className="text-[10px] font-bold text-emerald-500 uppercase">{senior.spo2 >= 95 ? 'Stable' : 'Warning'}</span>
+                          <span className="text-lg font-black text-slate-800">{readingText(senior, 'spo2')}</span>
+                          <ReadingLabel senior={senior} field="spo2" now={liveTime.getTime()} />
                         </div>
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center gap-2">
                           <div className={`w-12 h-2 rounded-full ${senior.battery < 20 ? 'bg-red-100' : 'bg-emerald-100'}`}>
-                            <div className={`h-full rounded-full ${senior.battery < 20 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${senior.battery}%` }}></div>
+                            <div className={`h-full rounded-full ${senior.battery < 20 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.max(0, Math.min(100, senior.battery ?? 0))}%` }}></div>
                           </div>
-                          <span className="text-xs font-bold text-slate-600">{senior.battery}%</span>
+                          <span className="text-xs font-bold text-slate-600">{readingText(senior, 'battery', '%')}</span>
                         </div>
                       </td>
                       <td className="table-cell">
@@ -1008,6 +848,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </td>
                     </tr>
                   ))}
+                {!seniors.length && <tr><td colSpan={5}><div className="admin-table-empty">No watch readings yet. Add a senior to begin monitoring.</div></td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1016,7 +857,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       );
     } else if (activeTab === 'SOS Alerts') {
       return (
-        <div className="p-8 space-y-8 flex-1 overflow-y-auto">
+        <div className="admin-page admin-alerts">
+          <div className="admin-alert-intro"><p>Review each incident and confirm the response when it has been handled.</p><button data-confirm-alert disabled={confirmingAlerts || !visibleAlerts.length} onClick={handleDismissAllDB} className="btn-outline">Confirm all responses</button></div>
           {/* Alert Summary Card */}
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6 w-fit">
             <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
@@ -1027,7 +869,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <span className="text-4xl font-black text-slate-800">{parseInt(activeAlertsCount)}</span>
                 <span className="text-lg font-bold text-slate-500">Active Alerts</span>
               </div>
-              <p className="text-sm font-bold text-red-500 uppercase tracking-widest mt-1">Require Attention</p>
+              <p className="text-sm font-medium text-slate-500 mt-1">{visibleAlerts.length ? 'Require attention' : 'No active incidents'}</p>
             </div>
           </div>
 
@@ -1036,7 +878,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             <div className="p-6 border-b border-slate-50">
               <div className="relative max-w-md">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input type="text" placeholder="Search by senior name..." className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none" />
+                <input aria-label="Search alerts by senior" value={alertSearch} onChange={event => setAlertSearch(event.target.value)} type="text" placeholder="Search by senior name..." className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none" />
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -1050,7 +892,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {visibleAlerts.map(alert => (
+                  {visibleAlerts.filter(alert => alert.seniorName?.toLowerCase().includes(alertSearch.trim().toLowerCase())).map(alert => (
                     <tr key={alert.id} className="hover:bg-slate-50/30 transition-colors">
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-4">
@@ -1078,6 +920,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </td>
                     </tr>
                   ))}
+                {!visibleAlerts.some(alert => alert.seniorName?.toLowerCase().includes(alertSearch.trim().toLowerCase())) && <tr><td colSpan={4}><div className="admin-table-empty">No active alerts match this search.</div></td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1088,7 +931,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       const mainZoneMatches = 'San Isidro East'.toLowerCase().includes(zoneSearch.trim().toLowerCase());
       const filteredHubs = trustedLocations.filter(loc => loc.name.toLowerCase().includes(zoneSearch.trim().toLowerCase()));
       return (
-        <div className="p-8 space-y-8 flex-1 overflow-y-auto">
+        <div className="admin-page admin-zones">
           {/* Stats Grid */}
           <div className="grid grid-cols-4 gap-6">
             <StatCard icon={MapPin} value="1" label="Geofencing Zone" subtext="Currently in use" color="text-emerald-600" iconBg="bg-emerald-100" signal={100} />
@@ -1253,7 +1096,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       return <AccountSettings key={userId} client={supabase} user={accountUser} permission={accountPermission} onUpdated={retryAuth} verifyCurrentPassword={verifyCurrentPassword} />;
     } else if (activeTab === 'Help & Support') {
       return (
-        <div className="p-8 flex-1 overflow-y-auto">
+        <div className="admin-page admin-help">
           <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 max-w-2xl">
             <h3 className="text-2xl font-bold text-slate-800 mb-2">Contact Support</h3>
             <p className="text-sm text-slate-400 font-medium mb-10">Need more help? Our support team is ready to assist you.</p>
@@ -1291,93 +1134,40 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   };
 
   return (
-    <div className="flex h-dvh w-full bg-[#eef2ea] text-gray-800 overflow-hidden relative" style={{fontFamily:"'Outfit',system-ui,sans-serif"}}>
-      {/* Background Mesh Gradient */}
-      <div className="absolute inset-0 z-0 opacity-40 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-200 blur-[100px]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-100 blur-[120px]"></div>
-      </div>
-
-      {/* Sidebar */}
-      <aside className="w-64 shrink-0 min-h-0 h-full bg-white/60 backdrop-blur-2xl border-r border-white/50 flex flex-col z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-        <div className="p-5 shrink-0 flex items-center gap-2.5 mb-2">
-          <div className="w-8 h-8 bg-[#4a7c59] rounded-lg flex items-center justify-center">
-            <Shield className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-lg font-bold text-gray-800 tracking-tight">SafeWatch</span>
-        </div>
-
-        <div className="px-5 mb-3 shrink-0">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Main</p>
-        </div>
-
-        <nav aria-label="Main navigation" className="flex-1 min-h-0 overflow-y-auto space-y-0.5 pb-2">
-          <SidebarItem icon={LayoutDashboard} label="Dashboard" onClick={() => setActiveTab('Dashboard')} active={activeTab === 'Dashboard'} />
-          <SidebarItem icon={Users} label="Senior Monitoring" onClick={() => setActiveTab('Senior Monitoring')} active={activeTab === 'Senior Monitoring'} />
-          <SidebarItem icon={MapPin} label="Live Location" onClick={() => setActiveTab('Live Location')} active={activeTab === 'Live Location'} />
-          <SidebarItem icon={HeartPulse} label="Health Overview" onClick={() => setActiveTab('Health Overview')} active={activeTab === 'Health Overview'} />
-          <SidebarItem icon={Shield} label="Geofence Zones" onClick={() => setActiveTab('Geofence Zones')} active={activeTab === 'Geofence Zones'} />
-          <SidebarItem icon={Settings} label="Settings" onClick={() => setActiveTab('Settings')} active={activeTab === 'Settings'} />
+    <div className="admin-nature">
+      <div className="admin-background" aria-hidden="true" />
+      {sidebarOpen && <button className="admin-sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
+      <aside id="admin-sidebar" className={'admin-sidebar' + (sidebarOpen ? ' admin-sidebar--open' : '')} aria-label="Workspace navigation">
+        <div className="admin-brand"><span className="admin-brand__mark"><Shield /></span><div><strong>SafeWatch</strong><span>Barangay portal</span></div><button className="admin-sidebar-close" aria-label="Close navigation" onClick={() => setSidebarOpen(false)}><CloseMenu /></button></div>
+        <p className="admin-sidebar__caption">Workspace</p>
+        <nav aria-label="Main navigation">
+          <SidebarItem icon={LayoutDashboard} label="Dashboard" onClick={() => navigate('Dashboard')} active={activeTab === 'Dashboard'} />
+          <SidebarItem icon={Users} label="Senior Monitoring" onClick={() => navigate('Senior Monitoring')} active={activeTab === 'Senior Monitoring'} />
+          <SidebarItem icon={MapPin} label="Live Location" onClick={() => navigate('Live Location')} active={activeTab === 'Live Location'} />
+          <SidebarItem icon={HeartPulse} label="Health Overview" onClick={() => navigate('Health Overview')} active={activeTab === 'Health Overview'} />
+          <SidebarItem icon={Map} label="Geofence Zones" onClick={() => navigate('Geofence Zones')} active={activeTab === 'Geofence Zones'} />
+          <SidebarItem icon={Bell} label="Alerts" onClick={() => navigate('SOS Alerts')} active={activeTab === 'SOS Alerts'} badge={sosAlerts.length || null} />
+          <SidebarItem icon={Settings} label="Settings" onClick={() => navigate('Settings')} active={activeTab === 'Settings'} />
+          <SidebarItem icon={HelpCircle} label="Help & Support" onClick={() => navigate('Help & Support')} active={activeTab === 'Help & Support'} />
         </nav>
-
-        <div className="border-t border-[#e2e8d8] shrink-0 space-y-0.5 py-2">
-          <SidebarItem icon={Bell} label="Alerts" onClick={() => setActiveTab('SOS Alerts')} active={activeTab === 'SOS Alerts'} badge={sosAlerts.length ? sosAlerts.length : null} />
-          <SidebarItem icon={HelpCircle} label="Help & Support" onClick={() => setActiveTab('Help & Support')} active={activeTab === 'Help & Support'} />
-          <button type="button" onClick={handleLogout} disabled={signingOut} className="sidebar-item text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-60">
-            <div className="flex items-center gap-3">
-              <LogOut className="w-[18px] h-[18px]" />
-              <span>{signingOut ? 'Logging out…' : 'Logout'}</span>
-            </div>
-          </button>
-        </div>
+        <div className="admin-sidebar__account"><button onClick={() => navigate('Settings')} aria-label="Open account settings"><span className="admin-account-initials">{accountInitials}</span><span><strong>{accountName}</strong><small>{accountPermission?.role === 'super_admin' ? 'Super administrator' : 'Barangay staff'}</small></span></button><button type="button" aria-label={signingOut ? 'Logging out' : 'Logout'} onClick={handleLogout} disabled={signingOut}><LogOut /></button></div>
       </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 min-w-0 h-full flex flex-col overflow-hidden z-10 relative">
-        {/* Top Bar */}
-        <header className="px-8 py-5 flex justify-between items-center gap-4 bg-white/40 backdrop-blur-xl border-b border-white/50 shrink-0 z-20">
-          <div className="relative flex-1 max-w-lg">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="Search seniors, alerts, or zones..." className="input-field !pl-10 !py-2.5 !rounded-xl !bg-[#f7f9f4]" />
-          </div>
-          <div className="flex items-center gap-4 shrink-0">
-            <button aria-label={`Alerts: ${sosAlerts.length}`} onClick={() => setActiveTab('SOS Alerts')} className="w-9 h-9 rounded-xl bg-[#f7f9f4] border border-[#e2e8d8] flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors relative">
-              <Bell className="w-4 h-4" />
-              {sosAlerts.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[8px] text-white font-bold flex items-center justify-center">{sosAlerts.length}</span>}
-            </button>
-            <button type="button" aria-label="Help & Support" onClick={() => setActiveTab('Help & Support')} className="w-9 h-9 rounded-xl bg-[#f7f9f4] border border-[#e2e8d8] flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
-              <HelpCircle className="w-4 h-4" />
-            </button>
-            <div className="relative" ref={accountMenuRef}>
-              <button type="button" ref={accountButtonRef} aria-label={`Account: ${accountName}`} aria-expanded={accountMenuOpen} aria-controls="account-menu" onClick={() => setAccountMenuOpen(open => !open)} className="w-10 h-10 rounded-full bg-[#4a7c59] border-2 border-white shadow-sm text-white text-sm font-semibold hover:bg-[#3d6a4a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4a7c59]">
-                {accountInitials}
-              </button>
-              {accountMenuOpen && (
-                <div id="account-menu" role="region" aria-label="Account menu" className="absolute right-0 top-full mt-3 w-64 rounded-2xl border border-[#e2e8d8] bg-white shadow-xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[#e2e8d8]">
-                    <p className="font-semibold text-sm break-words">{accountName}</p>
-                    <p className="text-xs text-gray-500 break-all">{profile.email}</p>
-                  </div>
-                  <button type="button" onClick={() => { setActiveTab('Settings'); setAccountMenuOpen(false); }} className="flex items-center gap-3 w-full px-4 py-3 text-sm text-left hover:bg-[#f7f9f4]">
-                    <Settings className="w-4 h-4" /> Account settings
-                  </button>
-                  <button type="button" onClick={handleLogout} disabled={signingOut} className="flex items-center gap-3 w-full px-4 py-3 text-sm text-left text-red-600 hover:bg-red-50 disabled:opacity-60">
-                    <LogOut className="w-4 h-4" /> {signingOut ? 'Logging out…' : 'Logout'}
-                  </button>
-                </div>
-              )}
+      <main className="admin-main">
+        <header className="admin-header">
+          <div className="admin-header__heading"><button className="admin-menu-button" aria-label="Open navigation" aria-controls="admin-sidebar" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><Menu /></button><div><p className="admin-breadcrumb">Workspace <span>/</span> {activeTab === 'SOS Alerts' ? 'Alerts' : activeTab}</p><h1>{activeTab === 'Dashboard' ? 'Monitoring overview' : activeTab === 'SOS Alerts' ? 'Alerts & response' : activeTab}</h1><p className="admin-header__subtitle">San Isidro East, Malvar, Batangas</p></div></div>
+          <div className="admin-header__tools">
+            <div className="admin-date"><Calendar /><div><span>{liveTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}</span><small>{timeStr}</small></div></div>
+            <button className="admin-icon-button" aria-label={'Alerts: ' + sosAlerts.length} onClick={() => navigate('SOS Alerts')}><Bell />{sosAlerts.length > 0 && <span className="admin-notification-dot" />}</button>
+            <div className="admin-account-menu" ref={accountMenuRef}>
+              <button type="button" ref={accountButtonRef} aria-label={'Account: ' + accountName} aria-expanded={accountMenuOpen} aria-controls="account-menu" onClick={() => setAccountMenuOpen(open => !open)} className="admin-account-initials">{accountInitials}</button>
+              {accountMenuOpen && <div id="account-menu" role="region" aria-label="Account menu" className="admin-account-dropdown"><div><strong>{accountName}</strong><p>{profile.email}</p></div><button onClick={() => { navigate('Settings'); setAccountMenuOpen(false); }}><Settings />Account settings</button><button onClick={handleLogout} disabled={signingOut}><LogOut />{signingOut ? 'Logging out…' : 'Logout'}</button></div>}
             </div>
-            <button onClick={() => setIsAddingSenior(true)} className="btn-primary flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Add Senior
-            </button>
+            <button aria-label="Add senior" onClick={() => setIsAddingSenior(true)} className="btn-primary admin-add-senior"><Plus /><span>Add senior</span></button>
           </div>
         </header>
-        {logoutError && <p role="alert" className="px-8 py-3 bg-red-50 text-red-700 text-sm">{logoutError}</p>}
-        <div className="flex-1 overflow-y-auto flex flex-col">
-          {renderContent()}
-        </div>
+        {logoutError && <p role="alert" className="admin-logout-error">{logoutError}</p>}
+        <div ref={contentRef} className="admin-content" data-page={activeTab}>{renderContent()}</div>
       </main>
-
 
       {/* Register Senior Modal */}
       {isAddingSenior && (
