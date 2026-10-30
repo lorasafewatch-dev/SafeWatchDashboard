@@ -49,7 +49,7 @@ import AuthEntry from '../../shared/components/AuthEntry.jsx';
 import PrivacyTermsGate from '../../shared/components/PrivacyTermsGate.jsx';
 import PasswordRecovery from '../../shared/components/PasswordRecovery.jsx';
 import RecoveryLinkConfirm from '../../shared/components/RecoveryLinkConfirm.jsx';
-import AccountAccessDenied from '../../shared/components/AccountAccessDenied.jsx';
+import AccountAccessDenied from './components/AdminAccessDenied.jsx';
 import { familyProfileFromUser } from '../../shared/familyProfile.js';
 
 // Map Controller

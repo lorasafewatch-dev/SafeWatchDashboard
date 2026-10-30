@@ -1,0 +1,42 @@
+.admin-access .admin-verification__content { padding: 25px 0; }
+.admin-access .admin-access__gate { display: block; width: 100%; min-height: 0; padding: 0; background: transparent; }
+.admin-access__gate > section { width: 100%; max-width: 560px; margin: 0 auto; padding: 34px 38px 25px; border: 1px solid #ffffffed; border-radius: 28px; color: #0b203c; background: linear-gradient(145deg, #fefffaf0, #f4fff2d9); box-shadow: 0 18px 55px #154d301c, inset 0 1px 0 #ffffff; backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); text-align: center; }
+.admin-access__gate > section > * { margin-block: 0; }
+.admin-access__identity { display: inline-flex; align-items: center; gap: 9px; padding: 6px 12px 6px 7px; border: 1px solid #c6e6d7; border-radius: 99px; color: #007d64; background: #e7f7ecc9; font-size: 10px; line-height: 1.4; font-weight: 650; letter-spacing: 1.6px; text-transform: uppercase; }
+.admin-access__icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; color: #00866a; background: #d3eee0; }
+.admin-access__icon svg { width: 17px; height: 17px; stroke-width: 1.8; }
+.admin-access__gate > section > h1 { margin-top: 21px; color: #0b203c; font-size: 29px; line-height: 1.2; font-weight: 650; letter-spacing: -.8px; text-wrap: balance; }
+.admin-access__gate .account-access__email { display: table; max-width: 100%; margin: 16px auto 0; padding: 6px 13px; border: 1px solid #d8e9df; border-radius: 9px; color: #315b65; background: #f4faf6b8; font-size: 12px; line-height: 1.5; word-break: normal; overflow-wrap: anywhere; }
+.admin-access__gate .account-access__message { max-width: 430px; margin: 17px auto 0; color: #526e80; font-size: 14px; line-height: 1.65; text-wrap: pretty; }
+.admin-access__gate .admin-access__progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 26px 0 24px; padding: 0; list-style: none; }
+.admin-access__step { position: relative; display: flex; align-items: center; flex-direction: column; gap: 9px; min-width: 0; color: #627987; font-size: 11px; line-height: 1.4; }
+.admin-access__step:not(:last-child)::after { content: ''; position: absolute; top: 15px; left: calc(50% + 23px); width: calc(100% - 36px); height: 1px; background: #cfdfd6; }
+.admin-access__step--complete::after { background: #93cdb4 !important; }
+.admin-access__step > span:last-child { max-width: 112px; }
+.admin-access__step-icon { display: grid; place-items: center; width: 31px; height: 31px; flex-shrink: 0; border: 1px solid #d0e0d6; border-radius: 50%; color: #6c8589; background: #f1f7f1; }
+.admin-access__step-icon svg { width: 15px; height: 15px; stroke-width: 1.9; }
+.admin-access__step--complete { color: #386950; }
+.admin-access__step--complete .admin-access__step-icon { border-color: #acd8c2; color: #008264; background: #dff3e5; }
+.admin-access__step--current { color: #006d57; font-weight: 600; }
+.admin-access__step--current .admin-access__step-icon { border-color: #008c6f; color: #fff; background: #008c6f; box-shadow: 0 0 0 4px #daf0e2; }
+.admin-access__gate button { font-family: inherit; touch-action: manipulation; cursor: pointer; }
+.admin-access__gate button:disabled { opacity: .6; cursor: default; }
+.admin-access__gate button:focus-visible { outline: 2px solid #00876d; outline-offset: 4px; }
+.admin-access__gate .account-access__retry { display: flex; align-items: center; justify-content: center; min-height: 48px; margin-top: 24px; padding: 12px 18px; border: 1px solid #089f80; border-radius: 12px; color: #fff; background: linear-gradient(140deg, #08a784, #00836d); box-shadow: inset 0 1px 0 #ffffff38, 0 5px 13px #00765e12; font-size: 14px; line-height: 1.4; font-weight: 600; transition: background .15s, box-shadow .15s; }
+.admin-access__gate .account-access__retry:hover:not(:disabled) { background: #007f68; box-shadow: 0 5px 16px #00765e24; }
+.admin-access__gate .account-access__signout { display: block; min-height: 42px; margin-top: 10px; padding: 10px 12px; border: 1px solid #d5e7dc; border-radius: 12px; color: #456477; background: #fbfff98c; font-size: 12px; line-height: 1.5; font-weight: 500; transition: background .15s, border-color .15s; }
+.admin-access__gate .account-access__signout:hover:not(:disabled) { border-color: #a8cbb8; color: #00785f; background: #e8f5eb; }
+.admin-access__gate [role="alert"] { margin-top: 18px; padding: 11px 13px; border: 1px solid #ebc3c9; border-radius: 11px; color: #a03144; background: #fff4f5e8; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+@media (max-width: 599px) {
+  .admin-access .admin-verification__content { padding: 27px 0; }
+  .admin-access__gate > section { padding: 29px 23px 21px; border-radius: 24px; }
+  .admin-access__gate > section > h1 { font-size: 27px; }
+  .admin-access__gate .account-access__message { font-size: 13px; }
+  .admin-access__gate .admin-access__progress { gap: 8px; margin-top: 24px; }
+  .admin-access__step { font-size: 10px; }
+}
+@media (max-width: 359px) {
+  .admin-access__gate > section { padding-inline: 19px; }
+  .admin-access__gate > section > h1 { font-size: 25px; }
+  .admin-access__step { font-size: 9px; }
+}
