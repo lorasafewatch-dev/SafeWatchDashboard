@@ -1,5 +1,10 @@
 # Deploy both apps to Vercel
 
+For the 30 October removal buttons, apply
+`supabase/migrations/20261030_senior_watch_removal.sql` before deploying the admin
+app. The migration creates the staff deletion function; it deletes no records.
+See [Remove watches and senior records](SENIOR_WATCH_REMOVAL.md).
+
 For the 27 October security update, also follow
 [Security hardening](SECURITY_HARDENING.md). Apply the family-approval migration,
 deploy both apps with the enrollment/review screens, then enable the staff-MFA

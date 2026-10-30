@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { getDashboardClient, verifyDashboardPassword } from './supabaseClient.js';
 import AccountSettings from './components/AccountSettings.jsx';
+import DeleteSeniorDialog from './components/DeleteSeniorDialog.jsx';
 import StatCard from './components/StatCard.jsx';
 import { AdminOverview, ReadingLabel } from './components/AdminNatureUI.jsx';
 import { monitoringSummary, readingText, watchUpdate } from './adminPresentation.js';
@@ -130,6 +131,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const accountInitials = (profile.fullName || profile.email.split('@')[0] || 'User')
     .split(/\s+/).filter(Boolean).map(part => Array.from(part)[0]).slice(0, 2).join('').toUpperCase();
   const [isAddingSenior, setIsAddingSenior] = useState(false);
+  const [deletingSenior, setDeletingSenior] = useState(null);
+  const [seniorMessage, setSeniorMessage] = useState('');
+  const seniorFetchSequence = React.useRef(0);
   const [isPickingLocation, setIsPickingLocation] = useState(false);
   const [isAddingLocationDetails, setIsAddingLocationDetails] = useState(false);
   const [newLocation, setNewLocation] = useState({ name: '', lat: '', lng: '', radius: 30 });
@@ -237,6 +241,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   useEffect(() => {
     alertFetchSequence.current += 1;
+    seniorFetchSequence.current += 1;
+    setDeletingSenior(null);
+    setSeniorMessage('');
     previousIncidents.current = [];
     confirmedKeys.current.clear();
     activeAlertKeys.current.clear();
@@ -287,6 +294,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   // Supabase Fetch & Realtime Sync
   const fetchSeniors = async () => {
+    const request = ++seniorFetchSequence.current;
     try {
       const { data: devicesList, error: devError } = await supabase
         .from('devices')
@@ -377,10 +385,26 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           };
         })
       );
-      setSeniors(seniorsWithTelemetry);
+      if (request === seniorFetchSequence.current) setSeniors(seniorsWithTelemetry);
     } catch (e) {
       console.error("Error fetching seniors:", e);
     }
+  };
+
+  const handleSeniorDeleted = id => {
+    seniorFetchSequence.current += 1;
+    alertFetchSequence.current += 1;
+    setSeniors(current => current.filter(item => item.id !== id));
+    setSosAlerts(current => current.filter(item => item.deviceId !== id));
+    previousIncidents.current = previousIncidents.current.filter(item => item.device_id !== id);
+    setSelectedAlert(current => current?.deviceId === id ? null : current);
+    setSelectedSeniorLoc(null);
+    pendingAlertTone.current = null;
+    stopAlertSounds();
+    setDeletingSenior(null);
+    setSeniorMessage('Senior profile, watch registration, and linked history deleted.');
+    fetchSeniors();
+    fetchAlerts();
   };
 
   const fetchAlerts = async () => {
@@ -699,10 +723,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                         <p className="text-[10px] text-slate-400 font-medium">{senior.date}</p>
                       </td>
                       <td className="table-cell">
+                        <div className="flex flex-wrap gap-2">
                         <button disabled={!senior.hasGpsLock} onClick={() => { setSelectedSeniorLoc([senior.lat, senior.lng]); setActiveTab('Live Location'); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg font-bold hover:bg-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                           <Eye className="w-4 h-4" />
                           <span className="text-[10px]">View</span>
                         </button>
+                        <button type="button" onClick={() => { setDeletingSenior(senior); setSeniorMessage(''); }} aria-label={`Delete senior ${senior.name}`} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 rounded-lg font-bold hover:bg-red-100 transition-all">
+                          <Trash2 className="w-4 h-4" aria-hidden="true"/><span className="text-xs">Delete senior</span>
+                        </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1166,8 +1195,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           </div>
         </header>
         {logoutError && <p role="alert" className="admin-logout-error">{logoutError}</p>}
-        <div ref={contentRef} className="admin-content" data-page={activeTab}>{renderContent()}</div>
+        <div ref={contentRef} className="admin-content" data-page={activeTab}>
+          {seniorMessage && <p role="status" className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{seniorMessage}</p>}
+          {renderContent()}
+        </div>
       </main>
+
+      {deletingSenior && <DeleteSeniorDialog key={deletingSenior.id} client={supabase} senior={deletingSenior} onCancel={() => setDeletingSenior(null)} onDeleted={handleSeniorDeleted}/>}
 
       {/* Register Senior Modal */}
       {isAddingSenior && (

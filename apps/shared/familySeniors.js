@@ -98,6 +98,15 @@ export async function unlinkFamilySenior(client, watchId) {
   if (data !== true) throw new Error('The senior could not be removed from your list. Please try again.');
 }
 
+export async function deleteSeniorWatch(client, watchId, confirmation) {
+  const id = normalizeWatchId(watchId);
+  if (confirmation !== 'DELETE') throw new Error('Type DELETE to confirm permanent deletion.');
+  const { data, error } = await client.rpc('delete_senior_watch', { p_device_id: id, p_confirmation: confirmation });
+  if (error) throw error;
+  if (data !== id) throw new Error('Deletion could not be verified. Refresh the senior list before trying again.');
+  return id;
+}
+
 export function seniorManagementError(error) {
   if (['PGRST202','PGRST205','42P01','42703'].includes(error?.code)) return 'Senior management is unavailable. Please ask your administrator to complete the database update.';
   if (error?.code === '23505') return 'This Watch ID is already registered. Choose Link existing senior instead.';
