@@ -10,7 +10,7 @@ export default function AdminMfaGate(props) {
       <div><strong>SafeWatch</strong><span>Barangay portal</span></div>
     </header>
     <div className="admin-verification__content">
-      <AccountMfaGate {...props} className="admin-verification__gate" header={
+      <AccountMfaGate {...props} app="dashboard" className="admin-verification__gate" header={
         <div className="admin-verification__identity">
           <span className="admin-verification__icon"><LockKeyhole aria-hidden="true" /></span>
           <p>{props.access?.enrollmentRequired ? 'Authenticator setup' : 'Account verification'}</p>

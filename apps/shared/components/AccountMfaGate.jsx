@@ -1,13 +1,15 @@
 import { useRef, useState } from 'react';
 import { accountSecurityError, verifyAuthenticator } from '../accountSecurity.js';
 import AccountAuthenticator from './AccountAuthenticator.jsx';
+import LogoutConfirmation from './LogoutConfirmation.jsx';
 
-export default function AccountMfaGate({ client, access, error, onVerified, className = '', header }) {
+export default function AccountMfaGate({ client, access, error, onVerified, className = '', header, app }) {
   const factors = access?.factors.filter(factor => factor.factor_type === 'totp') || [];
   const [factorId, setFactorId] = useState(factors[0]?.id || '');
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [logoutRequested, setLogoutRequested] = useState(false);
   const locked = useRef(false);
   const run = async action => {
     if (locked.current) return;
@@ -37,7 +39,8 @@ export default function AccountMfaGate({ client, access, error, onVerified, clas
         </form> : <p role="alert" className="text-sm text-red-700">This account requires another verification method. Use your supported sign-in method or contact your administrator.</p>}
       </> : <><p role="alert" className="text-sm text-red-700">{error}</p><button onClick={onVerified} className="font-bold text-emerald-700 underline">Retry account check</button></>}
       {message && <p role="alert" className="text-sm text-red-700">{message}</p>}
-      <button disabled={busy} onClick={() => run(async () => { const { error } = await client.auth.signOut(); if (error) throw error; })} className="text-sm text-slate-600 underline">Sign out</button>
+      <button disabled={busy} onClick={() => setLogoutRequested(true)} className="text-sm text-slate-600 underline">Sign out</button>
     </section>
+    {logoutRequested && <LogoutConfirmation client={client} app={app} onCancel={() => setLogoutRequested(false)}/>}
   </div>;
 }

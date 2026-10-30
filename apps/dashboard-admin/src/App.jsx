@@ -40,6 +40,7 @@ import {
 import { getDashboardClient, verifyDashboardPassword } from './supabaseClient.js';
 import AccountSettings from './components/AccountSettings.jsx';
 import DeleteSeniorDialog from './components/DeleteSeniorDialog.jsx';
+import LogoutConfirmation from '../../shared/components/LogoutConfirmation.jsx';
 import StatCard from './components/StatCard.jsx';
 import { AdminOverview, ReadingLabel } from './components/AdminNatureUI.jsx';
 import { monitoringSummary, readingText, watchUpdate } from './adminPresentation.js';
@@ -121,11 +122,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     return () => window.removeEventListener('keydown', close);
   }, [sidebarOpen]);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-  const [logoutError, setLogoutError] = useState('');
+  const [logoutRequested, setLogoutRequested] = useState(false);
   const accountMenuRef = React.useRef(null);
   const accountButtonRef = React.useRef(null);
-  const signOutBusy = React.useRef(false);
   const profile = familyProfileFromUser(accountUser);
   const accountName = profile.fullName || profile.email || 'My account';
   const accountInitials = (profile.fullName || profile.email.split('@')[0] || 'User')
@@ -198,29 +197,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   }, [accountMenuOpen]);
 
   useEffect(() => {
+    setLogoutRequested(false);
     if (!isLoggedIn) {
       setAccountMenuOpen(false);
-      setLogoutError('');
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, userId]);
 
-  const handleLogout = async () => {
-    if (signOutBusy.current) return;
-    signOutBusy.current = true;
-    setSigningOut(true);
-    setLogoutError('');
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      setAccountMenuOpen(false);
-      setActiveTab('Dashboard');
-    } catch {
-      setLogoutError('Logout failed. Please check your connection and try again.');
-    } finally {
-      signOutBusy.current = false;
-      setSigningOut(false);
-    }
-  };
+  const handleLogout = () => setLogoutRequested(true);
 
   useEffect(() => {
     const unlock = async event => {
@@ -1179,7 +1162,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           <SidebarItem icon={Settings} label="Settings" onClick={() => navigate('Settings')} active={activeTab === 'Settings'} />
           <SidebarItem icon={HelpCircle} label="Help & Support" onClick={() => navigate('Help & Support')} active={activeTab === 'Help & Support'} />
         </nav>
-        <div className="admin-sidebar__account"><button onClick={() => navigate('Settings')} aria-label="Open account settings"><span className="admin-account-initials">{accountInitials}</span><span><strong>{accountName}</strong><small>{accountPermission?.role === 'super_admin' ? 'Super administrator' : 'Barangay staff'}</small></span></button><button type="button" aria-label={signingOut ? 'Logging out' : 'Logout'} onClick={handleLogout} disabled={signingOut}><LogOut /></button></div>
+        <div className="admin-sidebar__account"><button onClick={() => navigate('Settings')} aria-label="Open account settings"><span className="admin-account-initials">{accountInitials}</span><span><strong>{accountName}</strong><small>{accountPermission?.role === 'super_admin' ? 'Super administrator' : 'Barangay staff'}</small></span></button><button type="button" aria-label="Logout" onClick={handleLogout}><LogOut /></button></div>
       </aside>
       <main className="admin-main">
         <header className="admin-header">
@@ -1189,12 +1172,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             <button className="admin-icon-button" aria-label={'Alerts: ' + sosAlerts.length} onClick={() => navigate('SOS Alerts')}><Bell />{sosAlerts.length > 0 && <span className="admin-notification-dot" />}</button>
             <div className="admin-account-menu" ref={accountMenuRef}>
               <button type="button" ref={accountButtonRef} aria-label={'Account: ' + accountName} aria-expanded={accountMenuOpen} aria-controls="account-menu" onClick={() => setAccountMenuOpen(open => !open)} className="admin-account-initials">{accountInitials}</button>
-              {accountMenuOpen && <div id="account-menu" role="region" aria-label="Account menu" className="admin-account-dropdown"><div><strong>{accountName}</strong><p>{profile.email}</p></div><button onClick={() => { navigate('Settings'); setAccountMenuOpen(false); }}><Settings />Account settings</button><button onClick={handleLogout} disabled={signingOut}><LogOut />{signingOut ? 'Logging out…' : 'Logout'}</button></div>}
+              {accountMenuOpen && <div id="account-menu" role="region" aria-label="Account menu" className="admin-account-dropdown"><div><strong>{accountName}</strong><p>{profile.email}</p></div><button onClick={() => { navigate('Settings'); setAccountMenuOpen(false); }}><Settings />Account settings</button><button onClick={handleLogout}><LogOut />Logout</button></div>}
             </div>
             <button aria-label="Add senior" onClick={() => setIsAddingSenior(true)} className="btn-primary admin-add-senior"><Plus /><span>Add senior</span></button>
           </div>
         </header>
-        {logoutError && <p role="alert" className="admin-logout-error">{logoutError}</p>}
         <div ref={contentRef} className="admin-content" data-page={activeTab}>
           {seniorMessage && <p role="status" className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{seniorMessage}</p>}
           {renderContent()}
@@ -1202,6 +1184,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       </main>
 
       {deletingSenior && <DeleteSeniorDialog key={deletingSenior.id} client={supabase} senior={deletingSenior} onCancel={() => setDeletingSenior(null)} onDeleted={handleSeniorDeleted}/>}
+      {logoutRequested && <LogoutConfirmation client={supabase} app="dashboard" onCancel={() => setLogoutRequested(false)} onLoggedOut={() => { setLogoutRequested(false); setAccountMenuOpen(false); setActiveTab('Dashboard'); }}/>}
 
       {/* Register Senior Modal */}
       {isAddingSenior && (

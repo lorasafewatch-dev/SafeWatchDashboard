@@ -1,0 +1,38 @@
+.sw-logout-confirm {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 28px;
+  overflow-y: auto;
+  border: 1px solid #fff;
+  border-radius: 28px;
+  background: radial-gradient(ellipse at 100% 0%, #dff2e5b3, transparent 64%), #f8fcf9;
+  box-shadow: 0 24px 90px #143b2e38, inset 0 1px 0 #fff;
+  color: #0b203c;
+  font-family: 'Outfit', system-ui, sans-serif;
+  text-align: left;
+  animation: sw-logout-enter 160ms ease-out;
+}
+.sw-logout-confirm::backdrop { background: #122e285c; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.sw-logout-confirm__brand { display: flex; align-items: center; gap: 7px; color: #4b7167; font-size: 10px; font-weight: 650; letter-spacing: 1.2px; text-transform: uppercase; }
+.sw-logout-confirm__brand svg { width: 17px; height: 19px; color: #008e70; }
+.sw-logout-confirm__icon { display: grid; place-items: center; width: 58px; height: 58px; margin-top: 24px; border: 1px solid #d0e9dc; border-radius: 19px; color: #008e70; background: linear-gradient(140deg, #e6f6ed, #d4eddf); }
+.sw-logout-confirm__icon svg { width: 27px; height: 27px; stroke-width: 1.8; }
+.sw-logout-confirm h2 { margin: 18px 0 9px; color: #0b203c; font-size: 26px; line-height: 1.2; font-weight: 700; letter-spacing: -.6px; }
+.sw-logout-confirm > p { margin: 0; color: #58728a; font-size: 14px; line-height: 1.65; }
+.sw-logout-confirm > .sw-logout-confirm__error { margin-top: 16px; padding: 12px 14px; border: 1px solid #f0cfcc; border-radius: 12px; background: #fff2ef; color: #a13333; font-size: 13px; }
+.sw-logout-confirm__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 26px; }
+.sw-logout-confirm__actions button { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 48px; padding: 12px 10px; border-radius: 14px; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; transition: background 120ms, box-shadow 120ms; }
+.sw-logout-confirm__actions button:focus-visible { outline: 3px solid #168c70; outline-offset: 3px; }
+.sw-logout-confirm__actions button:disabled { opacity: .65; cursor: wait; }
+.sw-logout-confirm__cancel { border: 1px solid #cfdfd7; color: #355c54; background: #ffffffb3; }
+.sw-logout-confirm__cancel:hover:not(:disabled) { background: #eaf4ee; }
+.sw-logout-confirm__submit { border: 1px solid #00876a; color: #fff; background: #008e70; box-shadow: 0 4px 12px #008e701c; }
+.sw-logout-confirm__submit:hover:not(:disabled) { background: #007b61; }
+.sw-logout-confirm__actions svg { width: 17px; height: 17px; flex-shrink: 0; }
+.sw-logout-confirm__spinner { animation: sw-logout-spin 900ms linear infinite; }
+@keyframes sw-logout-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sw-logout-spin { to { transform: rotate(360deg); } }
+@media (max-width: 359px) { .sw-logout-confirm { padding: 22px; } .sw-logout-confirm h2 { font-size: 23px; } .sw-logout-confirm__actions { gap: 9px; } }
+@media (prefers-reduced-motion: reduce) { .sw-logout-confirm, .sw-logout-confirm__spinner { animation: none; } .sw-logout-confirm__actions button { transition: none; } }
