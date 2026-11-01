@@ -1,5 +1,9 @@
 # Deploy both apps to Vercel
 
+For family-defined safe zones, apply
+`supabase/migrations/20261101_family_safe_zones.sql` before deploying both apps.
+See [Family safe zones](FAMILY_SAFE_ZONES.md) for configuration and validation.
+
 For the 30 October removal buttons, apply
 `supabase/migrations/20261030_senior_watch_removal.sql` before deploying the admin
 app. The migration creates the staff deletion function; it deletes no records.

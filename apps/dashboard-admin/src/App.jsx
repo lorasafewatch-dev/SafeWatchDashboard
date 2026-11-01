@@ -4,7 +4,8 @@ import { dashboardLocationAt, parseGpsPoint } from '../../shared/gpsLocation.js'
 import { MapNavigation, SafeWatchTiles } from '../../shared/components/SafeWatchMap.jsx';
 import { ALERT_QUERY_FILTER, acknowledgeIncident, confirmationErrorMessage, groupAlertIncidents, needsBarangayAttention } from '../../shared/alertLifecycle.js';
 import { enableAlertSounds, playAlertSound, stopAlertSounds } from '../../shared/alertSound.js';
-import { SAN_ISIDRO_EAST_BOUNDARY, isInsidePolygon } from '../../shared/safeZone.js';
+import { SAN_ISIDRO_EAST_BOUNDARY } from '../../shared/safeZone.js';
+import { familyZoneContains } from '../../shared/familySafeZone.js';
 import { MapContainer, Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -313,8 +314,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             }
           }
 
-          const isInSafeZone = hasGpsLock && isInsidePolygon(lat, lng, sanIsidroEastGeofence);
-          const isInTrustedZone = hasGpsLock && trustedLocations.some(loc => {
+          const isInSafeZone = hasGpsLock && familyZoneContains({ lat, lng }, device.family_safe_zone);
+          const isInTrustedZone = hasGpsLock && !device.family_safe_zone && trustedLocations.some(loc => {
             const R = 6371000;
             const dLat = (lat - loc.lat) * Math.PI / 180;
             const dLng = (lng - loc.lng) * Math.PI / 180;
@@ -357,6 +358,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             location: hasGpsLock ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'No current GPS fix',
             hasGpsLock,
             insideSafeZone: isInSafeZone,
+            safeZone: device.family_safe_zone || null,
             insideTrustedZone: isInTrustedZone,
             positionAt: packetTime,
             lat: lat,
@@ -593,6 +595,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
           <SafeWatchTiles /><MapNavigation bounds={sanIsidroEastGeofence} />
           <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
+          {seniors.filter(senior => senior.safeZone).map(senior => <Circle key={`family-zone-${senior.id}`} center={[senior.safeZone.lat, senior.safeZone.lng]} radius={senior.safeZone.radius} pathOptions={{ color: '#009a70', fillOpacity: .12, weight: 2 }}><Popup>{senior.name}: {senior.safeZone.name} · Family safe zone</Popup></Circle>)}
           {trustedLocations.map(loc => <Circle key={loc.id} center={[loc.lat, loc.lng]} radius={loc.radius} pathOptions={{ color: '#3492b0', fillColor: '#3492b0', fillOpacity: 0.1, weight: 2, dashArray: '5, 10' }} />)}
           {seniors.filter(senior => senior.hasGpsLock).map(senior => <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)}>
             <Popup><strong>{senior.name}</strong><br/>{senior.status}<br/>Updated {watchUpdate(senior, liveTime.getTime()).label}</Popup>
@@ -794,6 +797,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </Marker>
               ))}
               <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
+              {seniors.filter(senior => senior.safeZone).map(senior => <Circle key={`family-zone-${senior.id}`} center={[senior.safeZone.lat, senior.safeZone.lng]} radius={senior.safeZone.radius} pathOptions={{ color: '#009a70', fillOpacity: .12, weight: 2 }}><Popup>{senior.name}: {senior.safeZone.name} · Family safe zone</Popup></Circle>)}
             </MapContainer>
 
           </div>
@@ -1370,7 +1374,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <p className="text-sm font-medium text-slate-700 bg-slate-50 p-4 rounded-2xl">
                   {selectedAlert.rawType === 'SOS'
                     ? `An SOS alert was triggered manually by ${selectedAlert.seniorName} from their SafeWatch device. Immediate assistance may be required.`
-                    : `${selectedAlert.seniorName} has moved outside the designated San Isidro East safe zone boundary.`
+                    : `${selectedAlert.seniorName} has moved outside the ${selectedAlert.rawDetails?.zone_name || 'San Isidro East'} safe zone.`
                   }
                 </p>
               </div>
