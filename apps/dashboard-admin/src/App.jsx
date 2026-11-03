@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { isCurrentGpsPoint, telemetryTimestamp } from '../../shared/gpsStatus.js';
 import { dashboardLocationAt, parseGpsPoint } from '../../shared/gpsLocation.js';
 import { MapNavigation, SafeWatchTiles } from '../../shared/components/SafeWatchMap.jsx';
-import { ALERT_QUERY_FILTER, acknowledgeIncident, confirmationErrorMessage, groupAlertIncidents, needsBarangayAttention } from '../../shared/alertLifecycle.js';
+import { ALERT_QUERY_FILTER, acknowledgeIncident, alertTitle, batteryAlertMessage, confirmationErrorMessage, groupAlertIncidents, needsBarangayAttention } from '../../shared/alertLifecycle.js';
+import LocationHistory from '../../shared/components/LocationHistory.jsx';
+import NotificationBell from '../../shared/components/NotificationBell.jsx';
+import SosResponseUpdates, { SosResponseIndicator } from '../../shared/components/SosResponseStatus.jsx';
+import { loadSosResponses, mergeSosResponse, respondToSos, sosResponseError, sosResponseState } from '../../shared/sosResponse.js';
+import { withRequestTimeout } from '../../shared/requestTimeout.js';
 import { enableAlertSounds, playAlertSound, stopAlertSounds } from '../../shared/alertSound.js';
 import { SAN_ISIDRO_EAST_BOUNDARY } from '../../shared/safeZone.js';
 import { familyZoneContains } from '../../shared/familySafeZone.js';
@@ -110,6 +115,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const supabase = client || getDashboardClient();
   const { isLoggedIn, isLoadingAuth, userId, accountUser, accountPermission, pendingAccess, accessDenied, recoveryAccess, recoveryLink, authLinkError, authNotice, setAuthNotice, authError, retryAuth, privacyRequired, privacyError } = useAccountSession(supabase, 'dashboard');
   const [confirmingAlerts, setConfirmingAlerts] = useState(false);
+  const [sosResponses, setSosResponses] = useState([]);
+  const [sosResponsesError, setSosResponsesError] = useState('');
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [notificationsError, setNotificationsError] = useState('');
+  const [alertActionError, setAlertActionError] = useState('');
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alertSearch, setAlertSearch] = useState('');
@@ -144,6 +154,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [mapStyle, setMapStyle] = useState('standard');
   const [mapSearch, setMapSearch] = useState('');
   const [zoneSearch, setZoneSearch] = useState('');
+  const [historyDeviceId, setHistoryDeviceId] = useState('');
   const [dismissedAlerts] = useState(new Set());
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -151,6 +162,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const prevAlertIds = React.useRef(new Set());
   const previousIncidents = React.useRef([]);
   const alertFetchSequence = React.useRef(0);
+  const alertsBusy = React.useRef(false);
+  const sosResponsesRequest = React.useRef(0);
+  const sosResponsesBusy = React.useRef(false);
   const pendingAlertTone = React.useRef(null);
   const confirmationBusy = React.useRef(false);
   const confirmedKeys = React.useRef(new Set());
@@ -225,6 +239,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   useEffect(() => {
     alertFetchSequence.current += 1;
+    alertsBusy.current = false;
+    sosResponsesRequest.current += 1;
+    sosResponsesBusy.current = false;
     seniorFetchSequence.current += 1;
     setDeletingSenior(null);
     setSeniorMessage('');
@@ -234,6 +251,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     pendingAlertTone.current = null;
     prevAlertIds.current = new Set();
     setSosAlerts([]);
+    setSosResponses([]);
+    setSosResponsesError('');
+    setNotificationsLoading(true);
+    setNotificationsError('');
+    setAlertActionError('');
     stopAlertSounds();
     if (soundStorageKey) {
       try {
@@ -379,8 +401,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const handleSeniorDeleted = id => {
     seniorFetchSequence.current += 1;
     alertFetchSequence.current += 1;
+    alertsBusy.current = false;
+    sosResponsesRequest.current += 1;
+    sosResponsesBusy.current = false;
     setSeniors(current => current.filter(item => item.id !== id));
     setSosAlerts(current => current.filter(item => item.deviceId !== id));
+    setSosResponses(current => current.filter(item => item.device_id !== id));
     previousIncidents.current = previousIncidents.current.filter(item => item.device_id !== id);
     setSelectedAlert(current => current?.deviceId === id ? null : current);
     setSelectedSeniorLoc(null);
@@ -392,14 +418,32 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     fetchAlerts();
   };
 
+  const fetchSosResponseUpdates = async () => {
+    if (!isLoggedIn || confirmationBusy.current || sosResponsesBusy.current) return;
+    const request = ++sosResponsesRequest.current;
+    sosResponsesBusy.current = true;
+    try {
+      const rows = await withRequestTimeout(loadSosResponses(supabase), 10000, 'SOS response updates took too long.');
+      if (request !== sosResponsesRequest.current) return;
+      setSosResponses(rows); setSosResponsesError('');
+    } catch (error) {
+      if (request !== sosResponsesRequest.current) return;
+      setSosResponsesError(['PGRST202','42883'].includes(error.code) ? 'SOS response updates need the SafeWatch database update.' : 'SOS response updates could not be refreshed. Retry to see the latest decisions.');
+      if (['42501','PGRST301'].includes(error.code)) setSosResponses([]);
+    } finally { if (request === sosResponsesRequest.current) sosResponsesBusy.current = false; }
+  };
+
   const fetchAlerts = async () => {
-    if (confirmationBusy.current) return;
+    if (!isLoggedIn || confirmationBusy.current || alertsBusy.current) return;
+    alertsBusy.current = true;
+    setNotificationsLoading(true);
+    fetchSosResponseUpdates();
     const request = ++alertFetchSequence.current;
     try {
-      const { data, error } = await supabase.from('alerts')
+      const { data, error } = await withRequestTimeout(supabase.from('alerts')
         .select('*, devices(patient_name, device_name)')
         .or(ALERT_QUERY_FILTER)
-        .order('created_at', { ascending: false }).limit(500);
+        .order('created_at', { ascending: false }).limit(500), 10000, 'Loading notifications took too long.');
       if (error) throw error;
       if (request !== alertFetchSequence.current) return;
       const incidents = groupAlertIncidents(data || [], previousIncidents.current);
@@ -411,7 +455,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         seniorId: incident.device_id, deviceId: incident.device_id,
         date: new Date(incident.created_at).toLocaleDateString(),
         time: new Date(incident.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        fullTime: new Date(incident.created_at).toLocaleString(), status: 'ESCALATED_BHW',
+        fullTime: new Date(incident.created_at).toLocaleString(), status: incident.alert_type === 'LOW_BATTERY' ? 'BATTERY_LOW' : 'ESCALATED_BHW',
         rawType: incident.alert_type, rawDetails: incident.details || {},
         deviceName: incident.devices?.device_name || '',
       }));
@@ -423,7 +467,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       const newlyEscalated = mapped.filter(incident => !prevAlertIds.current.has(incident.key));
       if (newlyEscalated.length) {
         const incident = newlyEscalated.find(item => item.rawType === 'SOS') || newlyEscalated[0];
-        const tone = incident.rawType === 'SOS' ? 'sos' : 'geofence';
+        const tone = incident.rawType === 'SOS' ? 'sos' : incident.rawType === 'LOW_BATTERY' ? 'battery' : 'geofence';
         if (!playAlertSound(tone)) pendingAlertTone.current = { key: incident.key, tone };
         for (const incident of newlyEscalated) prevAlertIds.current.add(incident.key);
         if (soundStorageKey) {
@@ -432,9 +476,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         }
       }
       if (!mapped.length) { pendingAlertTone.current = null; stopAlertSounds(); }
-      setSelectedAlert(current => current && activeAlertKeys.current.has(current.key) ? current : null);
+      setSelectedAlert(current => current ? mapped.find(item => item.key === current.key) || null : null);
       setSosAlerts(mapped);
-    } catch (error) { console.error('Error fetching alerts:', error.message); }
+      setNotificationsError('');
+    } catch (error) {
+      console.error('Error fetching alerts:', error.message);
+      if (request === alertFetchSequence.current) setNotificationsError('Pending alerts could not be refreshed. Check your connection and retry.');
+    } finally { if (request === alertFetchSequence.current) { alertsBusy.current = false; setNotificationsLoading(false); } }
   };
 
   const commitConfirmation = incident => {
@@ -445,18 +493,21 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   };
 
   const handleDismissAlertDB = async (incident) => {
+    if (incident.alert_type === 'SOS') return handleSosResponse(incident, 'confirmed');
     if (confirmationBusy.current) return;
     confirmationBusy.current = true;
     setConfirmingAlerts(true);
+    setAlertActionError('');
     pendingAlertTone.current = null;
     stopAlertSounds();
     try {
       alertFetchSequence.current += 1;
+      alertsBusy.current = false;
       await acknowledgeIncident(supabase, incident, 'barangay');
       commitConfirmation(incident);
     } catch (error) {
       console.error('Error confirming alert:', error.message);
-      window.alert(confirmationErrorMessage(error));
+      setAlertActionError(confirmationErrorMessage(error));
     } finally {
       confirmationBusy.current = false;
       setConfirmingAlerts(false);
@@ -468,18 +519,48 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     if (confirmationBusy.current) return;
     confirmationBusy.current = true;
     setConfirmingAlerts(true);
+    sosResponsesRequest.current += 1;
+    sosResponsesBusy.current = false;
+    setAlertActionError('');
     pendingAlertTone.current = null;
     stopAlertSounds();
     try {
       alertFetchSequence.current += 1;
+      alertsBusy.current = false;
       for (const incident of sosAlerts.filter(item => !dismissedAlerts.has(item.id))) {
-        await acknowledgeIncident(supabase, incident, 'barangay');
+        if (incident.alert_type === 'SOS') {
+          const updated = await respondToSos(supabase, incident, 'confirmed', 'barangay');
+          setSosResponses(current => mergeSosResponse(current, updated));
+        } else await acknowledgeIncident(supabase, incident, 'barangay');
         commitConfirmation(incident);
       }
     } catch (error) {
       console.error('Error confirming alerts:', error.message);
-      window.alert(confirmationErrorMessage(error));
+      setAlertActionError(sosResponseError(error));
     } finally {
+      confirmationBusy.current = false;
+      setConfirmingAlerts(false);
+      await fetchAlerts();
+    }
+  };
+
+  const handleSosResponse = async (incident, decision) => {
+    if (confirmationBusy.current) return;
+    confirmationBusy.current = true;
+    setConfirmingAlerts(true);
+    setAlertActionError('');
+    alertFetchSequence.current += 1;
+    alertsBusy.current = false;
+    sosResponsesRequest.current += 1;
+    sosResponsesBusy.current = false;
+    pendingAlertTone.current = null;
+    stopAlertSounds();
+    try {
+      const updated = await respondToSos(supabase, incident, decision, 'barangay');
+      setSosResponses(current => mergeSosResponse(current, updated));
+      commitConfirmation(incident);
+    } catch (error) { setAlertActionError(sosResponseError(error)); }
+    finally {
       confirmationBusy.current = false;
       setConfirmingAlerts(false);
       await fetchAlerts();
@@ -493,6 +574,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       prevAlertIds.current = new Set();
       stopAlertSounds();
       setSosAlerts([]);
+      setSosResponses([]);
+      setSosResponsesError('');
       return;
     }
     // Check every 10 seconds so we can auto-escalate alerts that cross the 3-min threshold
@@ -522,6 +605,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
     return () => {
       alertFetchSequence.current += 1;
+      alertsBusy.current = false;
       clearInterval(timer);
       supabase.removeChannel(telemetrySubscription);
       supabase.removeChannel(alertsSubscription);
@@ -590,7 +674,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
     if (activeTab === 'Dashboard') {
       return <AdminOverview seniors={seniors} alerts={visibleAlerts} now={liveTime.getTime()}
-        onNavigate={navigate} onDetails={setSelectedAlert} onConfirm={handleDismissAlertDB} confirming={confirmingAlerts}
+        onNavigate={navigate} onDetails={setSelectedAlert} onConfirm={handleDismissAlertDB} onDecline={incident => handleSosResponse(incident, 'declined')} confirming={confirmingAlerts}
         onLocate={senior => { setSelectedSeniorLoc([senior.lat, senior.lng]); navigate('Live Location'); }}>
         <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
           <SafeWatchTiles /><MapNavigation bounds={sanIsidroEastGeofence} />
@@ -603,6 +687,16 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         </MapContainer>
         <div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Trusted hub</span></div>
       </AdminOverview>;
+    } else if (activeTab === 'Location History') {
+      const selected = seniors.find(senior => senior.id === historyDeviceId) || seniors[0];
+      return <div className="admin-page">
+        <div className="bg-white rounded-2xl p-5 mb-5"><label className="font-bold text-sm">Senior for location history
+          <select aria-label="Senior for location history" className="ml-3 rounded-xl border border-slate-200 px-4 py-2" value={selected?.id || ''} onChange={event => setHistoryDeviceId(event.target.value)}>
+            {!seniors.length && <option value="">No seniors available</option>}
+            {seniors.map(senior => <option key={senior.id} value={senior.id}>{senior.name}</option>)}
+          </select></label></div>
+        {selected ? <LocationHistory key={`${userId}:${selected.id}`} client={supabase} deviceId={selected.id} name={selected.name}/> : <p>No seniors available to review.</p>}
+      </div>;
     } else if (activeTab === 'Senior Monitoring') {
       const filteredSeniors = seniors.filter(s => {
         const matchesName = (s.name || '').toLowerCase().includes(searchQuery.trim().toLowerCase());
@@ -690,7 +784,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center gap-1.5">
-                          <Battery className={`w-4 h-4 ${senior.battery < 20 ? 'text-red-500 rotate-180' : 'text-emerald-500'}`} />
+                          <Battery className={`w-4 h-4 ${senior.battery != null && senior.battery <= 20 ? 'text-red-500 rotate-180' : 'text-emerald-500'}`} />
                           <p className="font-bold text-slate-600">{readingText(senior, 'battery', '%')}</p>
                         </div>
                         <span><ReadingLabel senior={senior} field="battery" now={liveTime.getTime()} /></span>
@@ -757,7 +851,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-                      <Battery className={`w-3.5 h-3.5 ${senior.battery < 20 ? 'text-red-500' : 'text-[#4a7c59]'}`} />
+                      <Battery className={`w-3.5 h-3.5 ${senior.battery != null && senior.battery <= 20 ? 'text-red-500' : 'text-[#4a7c59]'}`} />
                       {readingText(senior, 'battery', '%')}
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-500 font-medium">
@@ -852,8 +946,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center gap-2">
-                          <div className={`w-12 h-2 rounded-full ${senior.battery < 20 ? 'bg-red-100' : 'bg-emerald-100'}`}>
-                            <div className={`h-full rounded-full ${senior.battery < 20 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.max(0, Math.min(100, senior.battery ?? 0))}%` }}></div>
+                          <div className={`w-12 h-2 rounded-full ${senior.battery != null && senior.battery <= 20 ? 'bg-red-100' : 'bg-emerald-100'}`}>
+                            <div className={`h-full rounded-full ${senior.battery != null && senior.battery <= 20 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.max(0, Math.min(100, senior.battery ?? 0))}%` }}></div>
                           </div>
                           <span className="text-xs font-bold text-slate-600">{readingText(senior, 'battery', '%')}</span>
                         </div>
@@ -874,7 +968,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     } else if (activeTab === 'SOS Alerts') {
       return (
         <div className="admin-page admin-alerts">
-          <div className="admin-alert-intro"><p>Review each incident and confirm the response when it has been handled.</p><button data-confirm-alert disabled={confirmingAlerts || !visibleAlerts.length} onClick={handleDismissAllDB} className="btn-outline">Confirm all responses</button></div>
+          <div className="admin-alert-intro"><p>Confirm a response, or decline an SOS to notify the family.</p><button data-confirm-alert disabled={confirmingAlerts || !visibleAlerts.length} onClick={handleDismissAllDB} className="btn-outline">Confirm all responses</button></div>
           {/* Alert Summary Card */}
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6 w-fit">
             <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
@@ -903,7 +997,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <tr className="bg-slate-50/50">
                     <th className="table-header py-6">Senior</th>
                     <th className="table-header py-6">Alert Time</th>
-                    <th className="table-header py-6">Escalation Status</th>
+                    <th className="table-header py-6">Alert</th>
                     <th className="table-header py-6 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -926,13 +1020,17 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                         </div>
                       </td>
                       <td className="px-8 py-6">
+                        <p className="font-bold text-sm mb-2">{alertTitle(alert)}</p>
+                        {alert.rawType === 'LOW_BATTERY' && <p className="text-xs mb-2">{batteryAlertMessage(alert)}</p>}
+                        <SosResponseIndicator incident={alert}/>
                         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg w-fit ${alert.status === 'ESCALATED_BHW' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                           {alert.status === 'ESCALATED_BHW' ? <AlertCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                          <span className="text-[10px] font-black uppercase tracking-wider">{alert.status === 'ESCALATED_BHW' ? 'Escalated' : alert.status}</span>
+                          <span className="text-[10px] font-black uppercase tracking-wider">{alert.rawType === 'LOW_BATTERY' ? 'Charge watch' : alert.status === 'ESCALATED_BHW' ? 'Escalated' : alert.status}</span>
                         </div>
                       </td>
                       <td className="px-8 py-6 text-right">
-                        <button data-confirm-alert disabled={confirmingAlerts} onClick={() => handleDismissAlertDB(alert)} className="px-4 py-2 bg-slate-800 text-white text-[10px] font-black uppercase rounded-lg hover:bg-slate-900 transition-all disabled:opacity-50">Acknowledge</button>
+                        <button data-confirm-alert disabled={confirmingAlerts} onClick={() => handleDismissAlertDB(alert)} className="px-4 py-2 bg-slate-800 text-white text-[10px] font-black uppercase rounded-lg hover:bg-slate-900 transition-all disabled:opacity-50">Confirm response</button>
+                        {alert.alert_type === 'SOS' && <button data-confirm-alert disabled={confirmingAlerts || sosResponseState(alert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(alert, 'declined')} className="sos-decline-button block">Decline — notify family</button>}
                       </td>
                     </tr>
                   ))}
@@ -1160,6 +1258,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           <SidebarItem icon={LayoutDashboard} label="Dashboard" onClick={() => navigate('Dashboard')} active={activeTab === 'Dashboard'} />
           <SidebarItem icon={Users} label="Senior Monitoring" onClick={() => navigate('Senior Monitoring')} active={activeTab === 'Senior Monitoring'} />
           <SidebarItem icon={MapPin} label="Live Location" onClick={() => navigate('Live Location')} active={activeTab === 'Live Location'} />
+          <SidebarItem icon={Clock} label="Location History" onClick={() => navigate('Location History')} active={activeTab === 'Location History'} />
           <SidebarItem icon={HeartPulse} label="Health Overview" onClick={() => navigate('Health Overview')} active={activeTab === 'Health Overview'} />
           <SidebarItem icon={Map} label="Geofence Zones" onClick={() => navigate('Geofence Zones')} active={activeTab === 'Geofence Zones'} />
           <SidebarItem icon={Bell} label="Alerts" onClick={() => navigate('SOS Alerts')} active={activeTab === 'SOS Alerts'} badge={sosAlerts.length || null} />
@@ -1173,7 +1272,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           <div className="admin-header__heading"><button className="admin-menu-button" aria-label="Open navigation" aria-controls="admin-sidebar" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><Menu /></button><div><p className="admin-breadcrumb">Workspace <span>/</span> {activeTab === 'SOS Alerts' ? 'Alerts' : activeTab}</p><h1>{activeTab === 'Dashboard' ? 'Monitoring overview' : activeTab === 'SOS Alerts' ? 'Alerts & response' : activeTab}</h1><p className="admin-header__subtitle">San Isidro East, Malvar, Batangas</p></div></div>
           <div className="admin-header__tools">
             <div className="admin-date"><Calendar /><div><span>{liveTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}</span><small>{timeStr}</small></div></div>
-            <button className="admin-icon-button" aria-label={'Alerts: ' + sosAlerts.length} onClick={() => navigate('SOS Alerts')}><Bell />{sosAlerts.length > 0 && <span className="admin-notification-dot" />}</button>
+            <NotificationBell key={userId} app="barangay" userId={userId} alerts={sosAlerts} responses={sosResponses} className="admin-icon-button" loading={notificationsLoading} blocked={!!selectedAlert} error={[notificationsError,sosResponsesError].filter(Boolean).join(' ')} onRefresh={fetchAlerts} onViewAll={() => navigate('SOS Alerts')} onOpenNotification={item => { navigate('SOS Alerts'); if (item.active) setSelectedAlert(item.incident); }}/>
             <div className="admin-account-menu" ref={accountMenuRef}>
               <button type="button" ref={accountButtonRef} aria-label={'Account: ' + accountName} aria-expanded={accountMenuOpen} aria-controls="account-menu" onClick={() => setAccountMenuOpen(open => !open)} className="admin-account-initials">{accountInitials}</button>
               {accountMenuOpen && <div id="account-menu" role="region" aria-label="Account menu" className="admin-account-dropdown"><div><strong>{accountName}</strong><p>{profile.email}</p></div><button onClick={() => { navigate('Settings'); setAccountMenuOpen(false); }}><Settings />Account settings</button><button onClick={handleLogout}><LogOut />Logout</button></div>}
@@ -1182,8 +1281,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           </div>
         </header>
         <div ref={contentRef} className="admin-content" data-page={activeTab}>
+          {alertActionError && <p role="alert" className="bg-red-50 text-red-700 rounded-xl p-4 mb-4">{alertActionError}</p>}
           {seniorMessage && <p role="status" className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{seniorMessage}</p>}
           {renderContent()}
+          {activeTab === 'SOS Alerts' && <SosResponseUpdates responses={sosResponses} error={sosResponsesError} onRetry={fetchSosResponseUpdates}/>}
         </div>
       </main>
 
@@ -1335,7 +1436,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       {/* Alert Details Modal */}
       {selectedAlert && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100">
+          <div role="dialog" aria-modal="true" aria-label="Alert details" className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100">
             {/* Header */}
             <div className={`p-6 text-white ${
               selectedAlert.rawType === 'SOS' ? 'bg-red-500' : 'bg-orange-500'
@@ -1343,10 +1444,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
-                    {selectedAlert.rawType === 'SOS' ? <ShieldAlert className="w-6 h-6" /> : <MapPin className="w-6 h-6" />}
+                    {selectedAlert.rawType === 'SOS' ? <ShieldAlert className="w-6 h-6" /> : selectedAlert.rawType === 'LOW_BATTERY' ? <Battery className="w-6 h-6" /> : <MapPin className="w-6 h-6" />}
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold">{selectedAlert.rawType === 'SOS' ? 'SOS Alert' : 'Geofence Breach'}</h2>
+                    <h2 className="text-xl font-bold">{alertTitle(selectedAlert)}</h2>
                     <p className="text-white/80 text-sm">{selectedAlert.fullTime}</p>
                   </div>
                 </div>
@@ -1374,6 +1475,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <p className="text-sm font-medium text-slate-700 bg-slate-50 p-4 rounded-2xl">
                   {selectedAlert.rawType === 'SOS'
                     ? `An SOS alert was triggered manually by ${selectedAlert.seniorName} from their SafeWatch device. Immediate assistance may be required.`
+                    : selectedAlert.rawType === 'LOW_BATTERY' ? batteryAlertMessage(selectedAlert)
                     : `${selectedAlert.seniorName} has moved outside the ${selectedAlert.rawDetails?.zone_name || 'San Isidro East'} safe zone.`
                   }
                 </p>
@@ -1393,9 +1495,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     selectedAlert.rawType === 'SOS' ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' : 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/20'
                   }`}
                 >
-                  Acknowledge & Dismiss
+                  Confirm response
                 </button>
               </div>
+              <SosResponseIndicator incident={selectedAlert}/>
+              {selectedAlert.alert_type === 'SOS' && <button data-confirm-alert disabled={confirmingAlerts || sosResponseState(selectedAlert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(selectedAlert, 'declined')} className="sos-decline-button w-full">Decline — notify family</button>}
             </div>
           </div>
         </div>

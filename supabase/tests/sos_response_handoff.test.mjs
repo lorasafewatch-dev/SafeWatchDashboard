@@ -1,0 +1,164 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '../../.tools/alert-tests/node_modules/@electric-sql/pglite/dist/index.js';
+import { postgis } from '../../.tools/alert-tests/node_modules/@electric-sql/pglite-postgis/dist/index.js';
+import { groupAlertIncidents, needsBarangayAttention } from '../../apps/shared/alertLifecycle.js';
+import { isFamilyActionable, sosResponseState } from '../../apps/shared/sosResponse.js';
+import { loadSosResponses } from '../../apps/shared/sosResponse.js';
+import { buildBellNotifications, markNotificationsRead, unreadNotifications } from '../../apps/shared/notificationCenter.js';
+
+const pg = new PGlite({ extensions: { postgis } });
+const [family, outsider, staff, watch, second] = Array.from({length:5},(_,i)=>'91000000-0000-0000-0000-'+String(i+1).padStart(12,'0'));
+const q = async (sql,args=[]) => (await pg.query(sql,args)).rows;
+const asUser = async (id, action, role='authenticated', aal='aal2') => {
+  await q("SELECT set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claims',$2,false)",[id||'',JSON.stringify({sub:id,aal})]);
+  await pg.exec('SET ROLE '+role);
+  try { return await action(); } finally { await pg.exec('RESET ROLE'); }
+};
+const respond = (id,decision,user=family,role='family') => asUser(user,async()=> (await q('SELECT respond_to_sos($1,$2,$3) AS result',[id,decision,role]))[0].result.alert);
+const feed = (user=family) => asUser(user,()=>q('SELECT * FROM list_sos_response_updates()'));
+const apiFeed = user => loadSosResponses({rpc:async(name,args)=>{
+  assert.equal(name,'list_sos_response_updates');
+  const rows=await asUser(user,()=>q('SELECT * FROM list_sos_response_updates($1)',[args.p_limit]));
+  return {data:JSON.parse(JSON.stringify(rows)),error:null};
+}});
+const packet = (sos=true) => q("INSERT INTO telemetry(device_id,battery_percent,location,is_sos,received_at,rx_uptime_ms) VALUES($1,80,ST_GeogFromText('POINT(0 0)'),$2,now(),1000)",[watch,sos]);
+const watchSos = async () => (await q("SELECT * FROM alerts WHERE device_id=$1 AND alert_type='SOS' AND details->>'incident_open'='true'",[watch]))[0];
+const manual = (device=watch) => asUser(family,async()=> (await q('SELECT request_family_sos($1) AS id',[device]))[0].id);
+const migration = await readFile(new URL('../migrations/20261103_sos_response_handoff.sql',import.meta.url),'utf8');
+
+try {
+  await pg.exec(`CREATE EXTENSION postgis;
+    CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+    CREATE SCHEMA auth;
+    CREATE TABLE auth.users(id UUID PRIMARY KEY,email TEXT UNIQUE,email_confirmed_at TIMESTAMPTZ,raw_user_meta_data JSONB DEFAULT '{}',raw_app_meta_data JSONB DEFAULT '{}');
+    CREATE TABLE auth.mfa_factors(id TEXT PRIMARY KEY,user_id UUID,status TEXT);
+    CREATE FUNCTION auth.uid() RETURNS UUID LANGUAGE SQL STABLE AS $$ SELECT NULLIF(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    CREATE FUNCTION auth.jwt() RETURNS JSONB LANGUAGE SQL STABLE AS $$ SELECT COALESCE(NULLIF(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
+    GRANT USAGE ON SCHEMA auth TO anon,authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon,authenticated;
+    CREATE TABLE devices(id UUID PRIMARY KEY,patient_name TEXT,device_name TEXT);
+    CREATE TABLE telemetry(id BIGSERIAL PRIMARY KEY,device_id UUID REFERENCES devices,location GEOGRAPHY(POINT,4326),battery_percent INTEGER,is_sos BOOLEAN,created_at TIMESTAMPTZ DEFAULT now(),rx_uptime_ms BIGINT,received_at TIMESTAMPTZ);
+    CREATE TABLE alerts(id BIGSERIAL PRIMARY KEY,device_id UUID REFERENCES devices,alert_type TEXT,details JSONB,created_at TIMESTAMPTZ DEFAULT now());
+    ALTER TABLE devices ENABLE ROW LEVEL SECURITY; ALTER TABLE telemetry ENABLE ROW LEVEL SECURITY; ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY legacy_devices ON devices FOR ALL TO anon,authenticated USING(true) WITH CHECK(true);
+    CREATE POLICY legacy_telemetry ON telemetry FOR ALL TO anon,authenticated USING(true) WITH CHECK(true);
+    CREATE POLICY legacy_alerts ON alerts FOR ALL TO anon,authenticated USING(true) WITH CHECK(true);
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon,authenticated;`);
+  for (const [id,app] of [[family,'family'],[outsider,'family'],[staff,'dashboard']]) await q('INSERT INTO auth.users(id,email,email_confirmed_at,raw_user_meta_data,raw_app_meta_data) VALUES($1,$2,now(),$3,$4)',[id,id+'@example.test',{requested_app:app},id===staff?{role:'barangay'}:{}]);
+  for (const name of ['20261009_alert_incidents.sql','20261013_family_seniors.sql','20261013_notification_confirmation.sql','20261013_account_access.sql','20261027_family_access_approval.sql','20261027_identity_hardening.sql','20261030_senior_watch_removal.sql','20261101_family_safe_zones.sql','20261103_battery_location_history.sql']) await pg.exec(await readFile(new URL('../migrations/'+name,import.meta.url),'utf8'));
+  await pg.exec('CREATE TRIGGER telemetry_geofence_trigger AFTER INSERT ON telemetry FOR EACH ROW EXECUTE FUNCTION check_geofence()');
+  await q('INSERT INTO auth.mfa_factors VALUES($1,$2,$3)',['staff-factor',staff,'verified']);
+  await q('INSERT INTO devices(id,patient_name,device_name) VALUES($1,$2,$3),($4,$5,$6)',[watch,'Senior One','Watch',second,'Senior Two','Watch']);
+  await q('INSERT INTO family_seniors(user_id,device_id) VALUES($1,$2)',[family,watch]);
+  await packet(); const original=await watchSos();
+  await pg.exec(migration); await pg.exec(migration);
+  assert.equal((await watchSos()).id,original.id);
+  const declined=await respond(original.id,'declined');
+  assert.equal(declined.details.sos_assigned_to,'barangay');
+  assert.equal(declined.details.sos_responses.family.by,family);
+  assert.equal(declined.details.incident_open,true);
+  assert.equal(declined.details.sos_response_version,1);
+  assert.equal(needsBarangayAttention(declined),true);
+  assert.equal(isFamilyActionable(declined),false);
+  assert.equal((await feed(staff))[0].details.sos_responses.family.decision,'declined');
+  const secretaryBell=buildBellNotifications([declined],await apiFeed(staff),staff);
+  assert.equal(secretaryBell.length,1);
+  assert.equal(unreadNotifications(secretaryBell).length,1);
+  const readHandoff=markNotificationsRead([],secretaryBell.map(item=>item.key));
+  assert.equal(unreadNotifications(secretaryBell,readHandoff).length,0);
+  assert.equal((await watchSos()).details.status,'ESCALATED_BHW','Reading the bell cannot acknowledge an SOS');
+  console.log('PASS family decline immediately hands the existing SOS to the secretary with a persisted actor/time indicator');
+
+  await packet(); const refreshed=await watchSos();
+  assert.equal(refreshed.id,original.id); assert.equal(needsBarangayAttention(refreshed),true);
+  const retry=await respond(original.id,'declined');
+  assert.equal(retry.details.sos_response_version,1);
+  assert.equal(retry.details.sos_response_at,declined.details.sos_response_at);
+  const accepted=await respond(original.id,'confirmed',staff,'barangay');
+  assert.equal(accepted.details.status,'ACKNOWLEDGED_BHW');
+  assert.equal(accepted.details.sos_responses.family.decision,'declined');
+  assert.equal(accepted.details.sos_responses.barangay.decision,'confirmed');
+  assert.match(sosResponseState((await feed())[0]).message,/Barangay secretary confirmed/);
+  const familyBell=buildBellNotifications([],await apiFeed(family),family);
+  assert.equal(familyBell.length,1);
+  assert.equal(unreadNotifications(familyBell).length,1);
+  assert.match(familyBell[0].title,/Barangay secretary confirmed/);
+  assert.equal(familyBell[0].active,false);
+  assert.equal(unreadNotifications(buildBellNotifications([],await apiFeed(staff),staff)).length,0,'Own response is visible without an unread badge');
+  await packet(); assert.equal((await watchSos()).details.status,'ACKNOWLEDGED_BHW');
+  assert.equal(groupAlertIncidents([(await watchSos())]).length,0);
+  await assert.rejects(respond(original.id,'declined'),error=>error.code==='40001');
+  assert.equal((await respond(original.id,'confirmed')).details.status,'ACKNOWLEDGED_BHW');
+  assert.equal((await watchSos()).details.sos_response_version,2);
+  console.log('PASS repeated packets/retries cannot duplicate a handoff; secretary confirmation reaches family; late declines cannot undo it');
+
+  await packet(false); assert.equal(await watchSos(),undefined);
+  await packet(); const next=await watchSos(); assert.notEqual(next.id,original.id);
+  assert.equal(next.details.sos_responses,undefined);
+  await respond(next.id,'declined',staff,'barangay');
+  await packet(); const toFamily=await watchSos();
+  assert.equal(toFamily.details.sos_assigned_to,'family');
+  assert.equal(needsBarangayAttention(toFamily,Date.now()+900000),false);
+  assert.equal(isFamilyActionable(toFamily),true);
+  assert.match(sosResponseState((await feed())[0]).message,/secretary declined.*Family notified/);
+  await respond(next.id,'confirmed');
+  assert.match(sosResponseState((await feed(staff))[0]).message,/Family confirmed/);
+  const familyConfirmed=buildBellNotifications([],await apiFeed(staff),staff).find(item=>String(item.incident.id)===String(next.id));
+  assert.match(familyConfirmed.title,/Family confirmed/);
+  assert.equal(unreadNotifications([familyConfirmed],readHandoff).length,1);
+  console.log('PASS real SOS RPC feed produces unread bell handoffs and reciprocal confirmations; mark-read leaves database status unchanged');
+  console.log('PASS secretary decline notifies family; family confirmation is visible to secretary; a fresh watch SOS has fresh responses');
+
+  const manualId=await manual();
+  await respond(manualId,'declined');
+  assert.equal(await manual(),manualId);
+  const both=await respond(manualId,'declined',staff,'barangay');
+  assert.equal(both.details.sos_assigned_to,'both');
+  assert.notEqual(both.details.incident_open,false);
+  assert.equal(needsBarangayAttention(both),true); assert.equal(isFamilyActionable(both),true);
+  const completed=await respond(manualId,'confirmed');
+  assert.equal(completed.details.incident_open,false);
+  assert.equal(completed.details.status,'ACKNOWLEDGED_FAMILY');
+  assert.ok((await feed(staff)).some(row=>row.id===manualId));
+  console.log('PASS both declining leaves SOS actionable for both; manual SOS stays deduplicated, and closed confirmations remain visible');
+
+  const compatible=await manual();
+  const saved=await asUser(family,()=>q('SELECT acknowledge_alert_incident($1,$2) AS saved',[compatible,'family']));
+  assert.equal(saved[0].saved,true);
+  assert.equal((await q('SELECT details FROM alerts WHERE id=$1',[compatible]))[0].details.sos_responses.family.decision,'confirmed');
+  const before=(await feed()).length;
+  await pg.exec(migration); assert.equal((await feed()).length,before);
+  const other=(await q("INSERT INTO alerts(device_id,alert_type,details) VALUES($1,'SOS','{\"status\":\"PENDING_FAMILY\",\"incident_open\":true}') RETURNING id",[second]))[0];
+  await respond(other.id,'confirmed',staff,'barangay');
+  assert.equal((await feed()).some(row=>row.device_id===second),false);
+  assert.equal((await feed(staff)).some(row=>row.device_id===second),true);
+  console.log('PASS existing confirmation RPC also records indicators; migration reapplication preserves history; feeds respect linked-watch RLS');
+
+  for (const kind of ['GEOFENCE','LOW_BATTERY']) {
+    const nonSos=(await q("INSERT INTO alerts(device_id,alert_type,details) VALUES($1,$2,'{\"status\":\"PENDING_FAMILY\",\"incident_open\":true}') RETURNING id",[watch,kind]))[0];
+    assert.equal((await asUser(family,()=>q('SELECT acknowledge_alert_incident($1,$2) AS saved',[nonSos.id,'family'])))[0].saved,true);
+    const details=(await q('SELECT details FROM alerts WHERE id=$1',[nonSos.id]))[0].details;
+    assert.equal(details.status,'ACKNOWLEDGED_FAMILY'); assert.equal(details.sos_responses,undefined);
+    await assert.rejects(respond(nonSos.id,'declined'),error=>error.code==='40001');
+  }
+  console.log('PASS geofence/battery confirmations keep their existing behavior and cannot be declined through the SOS endpoint');
+
+  const pending=await manual();
+  await assert.rejects(respond(pending,'declined',outsider),error=>error.code==='42501');
+  await assert.rejects(respond(pending,'declined',family,'barangay'),error=>error.code==='42501');
+  await assert.rejects(respond(pending,'declined',staff,'family'),error=>error.code==='42501');
+  await asUser(staff,()=>assert.rejects(q('SELECT respond_to_sos($1,$2,$3)',[pending,'confirmed','barangay']),error=>error.code==='42501'),'authenticated','aal1');
+  await asUser(null,()=>assert.rejects(q('SELECT respond_to_sos($1,$2,$3)',[pending,'declined','family']),/permission denied/),'anon');
+  await asUser(null,()=>assert.rejects(q('SELECT * FROM list_sos_response_updates()'),/permission denied/),'anon');
+  await asUser(family,()=>assert.rejects(q('SELECT * FROM list_sos_response_updates(101)'),error=>error.code==='22023'));
+  await assert.rejects(respond(pending,'dismiss'),error=>error.code==='22023');
+  await asUser(family,async()=>assert.equal((await q("UPDATE alerts SET details='{}' WHERE id=$1 RETURNING id",[pending])).length,0));
+  await q('DELETE FROM family_seniors WHERE user_id=$1 AND device_id=$2',[family,watch]);
+  await assert.rejects(respond(pending,'declined'),error=>error.code==='42501');
+  assert.equal((await feed()).length,0);
+  await q("UPDATE safewatch_account_access SET status='suspended' WHERE user_id=$1",[staff]);
+  await assert.rejects(feed(staff),error=>error.code==='42501');
+  console.log('PASS unlinked/revoked/suspended/anonymous users, forged roles, missing staff MFA, invalid decisions and direct family writes are rejected');
+} finally { await pg.close(); }

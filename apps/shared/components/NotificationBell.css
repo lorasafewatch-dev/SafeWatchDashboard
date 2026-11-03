@@ -1,0 +1,37 @@
+.watch-notification-bell { position: relative; display: grid; place-items: center; width: 42px; height: 42px; flex-shrink: 0; padding: 0; border: 1px solid #ffffffe0; border-radius: 50%; background: #f7fff9a8; color: #173b47; cursor: pointer; }
+.watch-notification-bell > svg { width: 24px; height: 24px; stroke-width: 1.8; }
+.watch-notification-bell__count { position: absolute; top: -4px; right: -6px; display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 4px; border: 2px solid #f4fff6; border-radius: 20px; background: #dc3549; color: white; font: 700 10px/1 system-ui,sans-serif; }
+.watch-notifications { position: fixed; inset: 0; z-index: 7500; color: #15352e; font-family: 'Outfit',system-ui,sans-serif; }
+.watch-notifications *, .watch-notifications *::before, .watch-notifications *::after { box-sizing: border-box; }
+.watch-notifications__backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #0e2b281f; cursor: default; }
+.watch-notifications__panel { position: fixed; display: flex; flex-direction: column; width: min(410px,calc(100vw - 24px)); overflow: hidden; border: 1px solid #d5e7dc; border-radius: 20px; background: #fbfffc; box-shadow: 0 20px 60px #0e332d33; }
+.watch-notifications button { font: inherit; cursor: pointer; }
+.watch-notifications button:disabled { cursor: default; opacity: .5; }
+.watch-notifications button:focus-visible, .watch-notification-bell:focus-visible { outline: 3px solid #299c77; outline-offset: -3px; }
+.watch-notifications__heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 18px 12px; }
+.watch-notifications__heading h2 { margin: 0; font-size: 19px; font-weight: 750; }
+.watch-notifications__heading p { margin: 4px 0 0; font-size: 12px; color: #627b70; }
+.watch-notifications__heading button { display: grid; place-items: center; width: 34px; height: 34px; padding: 6px; border: 0; border-radius: 50%; background: #edf5ef; color: #335648; }
+.watch-notifications__heading svg { width: 20px; height: 20px; }
+.watch-notifications__tools { display: flex; justify-content: space-between; padding: 0 18px 12px; gap: 12px; border-bottom: 1px solid #e0ebe3; }
+.watch-notifications__tools button { display: flex; align-items: center; gap: 5px; padding: 4px 0; border: 0; background: transparent; color: #176849; font-size: 11px; font-weight: 650; }
+.watch-notifications__tools svg { width: 15px; height: 15px; }
+.watch-notifications__notice, .watch-notifications__error { flex-shrink: 0; margin: 0; padding: 10px 18px; font-size: 12px; line-height: 1.5; background: #f1f7f1; color: #4b6a58; }
+.watch-notifications__error { background: #fff1ed; color: #963c2d; }
+.watch-notifications__list { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
+.watch-notifications__item { display: flex; flex-direction: column; align-items: stretch; gap: 5px; width: 100%; padding: 15px 18px; border: 0; border-bottom: 1px solid #e4ede7; background: transparent; color: #163b32; text-align: left; }
+.watch-notifications__item:hover { background: #f0f8f2; }
+.watch-notifications__item.is-unread { background: #eaf7ef; box-shadow: inset 3px 0 #00a779; }
+.watch-notifications__item-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; font-size: 12px; }
+.watch-notifications__item-top > span { font-size: 10px; font-weight: 650; color: #5f796a; }
+.watch-notifications__title { font-size: 13px; line-height: 1.45; font-weight: 700; }
+.watch-notifications__message { font-size: 12px; line-height: 1.5; color: #526f61; }
+.watch-notifications__item time { font-size: 10px; color: #60796b; }
+.watch-notifications__action { padding-top: 2px; color: #087a54; font-size: 11px; font-weight: 700; }
+.watch-notifications__panel footer { flex-shrink: 0; padding: 12px 18px 16px; text-align: center; border-top: 1px solid #e0ebe3; }
+.watch-notifications__panel footer p { margin: 0 0 7px; font-size: 10px; color: #62776b; }
+.watch-notifications__panel footer button { border: 0; padding: 6px 0; background: transparent; color: #086e4d; font-size: 12px; font-weight: 700; }
+.watch-notifications__empty { padding: 28px 18px; text-align: center; }
+.watch-notifications__empty > svg { width: 30px; height: 30px; margin: 0 auto 12px; color: #7b9d8a; }
+.watch-notifications__empty h3 { margin: 0 0 6px; font-size: 14px; }
+.watch-notifications__empty p { margin: 0; font-size: 12px; line-height: 1.6; color: #62776b; }

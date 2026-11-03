@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { alertTitle, batteryAlertMessage } from '../../../shared/alertLifecycle.js';
+import { SosResponseIndicator } from '../../../shared/components/SosResponseStatus.jsx';
+import { sosResponseState } from '../../../shared/sosResponse.js';
 import { Battery, Bell, ChevronRight, MapPin, Maximize2, Search, ShieldCheck, Users, Watch } from 'lucide-react';
 import { monitoringSummary, readingStatus, readingText, watchUpdate } from '../adminPresentation.js';
 import StatCard from './StatCard.jsx';
@@ -13,7 +16,7 @@ export function ReadingLabel({ senior, field, now }) {
   return <span className={`admin-reading-label admin-reading-label--${status.tone}`}>{status.label}</span>;
 }
 
-export function AdminOverview({ seniors, alerts, now, children, onNavigate, onDetails, onConfirm, confirming, onLocate }) {
+export function AdminOverview({ seniors, alerts, now, children, onNavigate, onDetails, onConfirm, onDecline, confirming, onLocate }) {
   const [search, setSearch] = useState('');
   const summary = monitoringSummary(seniors, now);
   const inside = seniors.filter(senior => senior.hasGpsLock && senior.insideSafeZone).length;
@@ -36,10 +39,12 @@ export function AdminOverview({ seniors, alerts, now, children, onNavigate, onDe
         <div className="admin-incident-list">
           {!alerts.length && <div className="admin-empty"><ShieldCheck /><h3>All clear</h3><p>No active alerts require a response.</p></div>}
           {priorityAlerts.map(incident => <article key={incident.key || incident.id} className={`admin-incident ${incident.rawType === 'SOS' ? 'admin-incident--sos' : ''}`}>
-            <div className="admin-incident__icon">{incident.rawType === 'SOS' ? <Bell /> : <MapPin />}</div>
-            <div className="admin-incident__body"><div className="admin-incident__title"><h3>{incident.rawType === 'SOS' ? 'SOS alert' : 'Outside safe zone'}</h3><time>{incident.time}</time></div>
-              <p className="admin-incident__name">{incident.seniorName}</p><p className="admin-incident__description">{incident.rawType === 'SOS' ? 'Watch SOS button pressed' : 'Senior left the designated boundary'}</p>
+            <div className="admin-incident__icon">{incident.rawType === 'SOS' ? <Bell /> : incident.rawType === 'LOW_BATTERY' ? <Battery /> : <MapPin />}</div>
+            <div className="admin-incident__body"><div className="admin-incident__title"><h3>{alertTitle(incident)}</h3><time>{incident.time}</time></div>
+              <p className="admin-incident__name">{incident.seniorName}</p><p className="admin-incident__description">{incident.rawType === 'SOS' ? 'Watch SOS button pressed' : incident.rawType === 'LOW_BATTERY' ? batteryAlertMessage(incident) : 'Senior left the designated boundary'}</p>
+              <SosResponseIndicator incident={incident}/>
               <div className="admin-incident__actions"><button className="admin-incident__details" onClick={() => onDetails(incident)}>View details</button><button data-confirm-alert disabled={confirming} onClick={() => onConfirm(incident)}>{confirming ? 'Saving…' : 'Confirm response'}</button></div>
+              {incident.alert_type === 'SOS' && onDecline && <button data-confirm-alert disabled={confirming || sosResponseState(incident).responses.barangay?.decision === 'declined'} className="sos-decline-button" onClick={() => onDecline(incident)}>Decline — notify family</button>}
             </div>
           </article>)}
         </div>

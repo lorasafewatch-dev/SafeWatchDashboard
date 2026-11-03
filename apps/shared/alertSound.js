@@ -30,6 +30,7 @@ export function playAlertSound(type = 'geofence') {
     if (!audio || audio.state !== 'running') return false;
     stopAlertSounds();
     const notes = type === 'sos' ? [[880, 0, .14], [880, .28, .14], [880, .56, .24]]
+      : type === 'battery' ? [[440, 0, .16], [330, .23, .24]]
       : type === 'reminder' ? [[740, 0, .12], [988, .20, .18]]
       : [[523.25, 0, .20], [659.25, .24, .32]];
     for (const [frequency, offset, duration] of notes) {

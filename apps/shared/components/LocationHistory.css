@@ -1,0 +1,19 @@
+.watch-history { padding: 20px; border: 1px solid #d9e6df; border-radius: 22px; background: #fffffff0; color: #163c3a; min-width: 0; }
+.watch-history__heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 18px; }
+.watch-history h2 { font-size: 20px; font-weight: 750; margin: 0 0 4px; }
+.watch-history p { font-size: 13px; margin: 8px 0; line-height: 1.6; }
+.watch-history label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; }
+.watch-history input { border: 1px solid #bacfc7; border-radius: 10px; padding: 8px; color: #163c3a; background: white; }
+.watch-history button { cursor: pointer; font: inherit; }
+.watch-history button:disabled { opacity: .5; cursor: wait; }
+.watch-history button:focus-visible, .watch-history input:focus-visible { outline: 3px solid #3d9f8a; outline-offset: 3px; }
+.watch-history__summary { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; font-size: 12px; }
+.watch-history__summary button, .watch-history__error button { text-decoration: underline; font-weight: 700; }
+.watch-history__map { height: 300px; overflow: hidden; border-radius: 14px; isolation: isolate; margin-top: 12px; }
+.watch-history__hint, .watch-history__range { color: #52706d; }
+.watch-history__points { max-height: 240px; overflow: auto; list-style: none; margin: 16px 0; padding: 0; border: 1px solid #e1eae6; border-radius: 12px; }
+.watch-history__points button { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; width: 100%; text-align: left; padding: 12px; font-size: 12px; border-bottom: 1px solid #e1eae6; background: transparent; }
+.watch-history__points button[aria-pressed="true"] { background: #e0f2eb; }
+.watch-history__points span { color: #52706d; }
+.watch-history__more { border: 1px solid #afd0c2; border-radius: 10px; padding: 10px 16px; color: #075b47; background: #eaf6ef; font-size: 13px !important; font-weight: 700 !important; }
+.watch-history__error { color: #a33229; }

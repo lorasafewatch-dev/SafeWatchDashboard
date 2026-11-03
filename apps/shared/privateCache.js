@@ -1,7 +1,7 @@
 export function clearPrivateBrowserCache(app, browser = globalThis) {
   const prefixes = app === 'family'
-    ? ['safewatch.family.alerts.v1:', 'safewatch.family.selected-senior.v1:']
-    : ['safewatch.barangay.alerts.v1:'];
+    ? ['safewatch.family.alerts.v1:', 'safewatch.family.selected-senior.v1:', 'safewatch.family.notifications.v1:']
+    : ['safewatch.barangay.alerts.v1:', 'safewatch.barangay.notifications.v1:'];
   for (const name of ['localStorage', 'sessionStorage']) {
     try {
       const storage = browser[name];

@@ -1,0 +1,18 @@
+.sos-response-status { border: 1px solid #f0cda4; border-radius: 12px; background: #fff8ef; padding: 12px; color: #77420b; text-align: left; font-size: 12px; line-height: 1.6; margin: 10px 0; }
+.sos-response-status--confirmed { border-color: #a9d7bc; background: #eef9f1; color: #1c6542; }
+.sos-response-status p { margin: 0; }
+.sos-response-status__message { font-weight: 700; }
+.sos-response-status__receipt { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; padding-top: 5px; }
+.sos-response-status time { font-size: 11px; }
+.sos-response-updates { padding: 20px; border: 1px solid #dbe7df; border-radius: 20px; background: #fffffff0; color: #183a32; }
+.sos-response-updates h2 { font-size: 18px; font-weight: 750; margin: 0 0 5px; }
+.sos-response-updates > p { font-size: 12px; line-height: 1.7; margin: 4px 0 12px; }
+.sos-response-updates__list { max-height: 520px; overflow-y: auto; }
+.sos-response-updates article { padding: 12px 0; border-top: 1px solid #e2eae5; }
+.sos-response-updates h3 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+.sos-response-updates__incident { font-size: 11px; color: #607569; }
+.sos-response-updates button { text-decoration: underline; font-weight: 700; }
+.sos-decline-button { border: 1px solid #caaba0 !important; background: #fff7f2 !important; color: #8e3c24 !important; border-radius: 12px; padding: 10px 14px; font-size: 12px; font-weight: 700; margin-top: 8px; }
+.sos-decline-button:disabled { opacity: .55; }
+.sos-response-notice { display: block; width: 100%; padding: 12px 16px; margin: 0 0 16px; border: 1px solid #aacdb8; border-radius: 12px; background: #eff9f1; color: #246148; text-align: left; font-size: 12px; line-height: 1.6; font-weight: 650; cursor: pointer; }
+.family-nature .sos-response-notice { width: calc(100% - 32px); margin: 0 16px 16px; }

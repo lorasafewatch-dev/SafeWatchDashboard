@@ -30,7 +30,7 @@ export function groupAlertIncidents(rows = [], previous = []) {
   }
   const groups = new Map();
   for (const row of rows) {
-    if (!['GEOFENCE', 'SOS'].includes(row.alert_type)) continue;
+    if (!['GEOFENCE', 'SOS', 'LOW_BATTERY'].includes(row.alert_type)) continue;
     if (!activeStatuses.has(row.details?.status || 'PENDING_FAMILY')) continue;
     if (row.details?.incident_open === false) continue;
     // Retain compatibility with the old geofence acknowledgement mechanism.
@@ -65,13 +65,14 @@ export function groupAlertIncidents(rows = [], previous = []) {
       rootId = prior.id;
     }
     incidents.push({ ...first, id: rootId, created_at: started, groupKey,
-      key: `${groupKey}:${started}`, memberIds: members.map(row => row.id),
+      key: `${groupKey}:${started}${first.alert_type === 'SOS' && last.details?.sos_response_version ? `:response:${last.details.sos_response_version}` : ''}`, memberIds: members.map(row => row.id),
       devices: last.devices || first.devices,
       details: { ...first.details, ...last.details, first_seen_at: started,
         last_seen_at: last.details?.last_seen_at || last.created_at },
       updateCount: Math.max(members.length, Number(last.details?.update_count) || 1) });
   }
-  return incidents.sort((a, b) => Number(b.alert_type === 'SOS') - Number(a.alert_type === 'SOS')
+  const priority = { SOS: 0, GEOFENCE: 1, LOW_BATTERY: 2 };
+  return incidents.sort((a, b) => priority[a.alert_type] - priority[b.alert_type]
     || timestamp(a.created_at) - timestamp(b.created_at));
 }
 
@@ -82,12 +83,12 @@ export function planAlertSounds(incidents, ledger = {}, now = Date.now()) {
     const clock = alertClock(incident, now);
     const entry = { ...nextLedger[incident.key] };
     if (!entry.initial) {
-      events.push({ key: incident.key, tone: incident.alert_type === 'SOS' ? 'sos' : 'geofence' });
+      events.push({ key: incident.key, tone: incident.alert_type === 'SOS' ? 'sos' : incident.alert_type === 'LOW_BATTERY' ? 'battery' : 'geofence' });
       entry.initial = true;
       // An incident first discovered in its last 30 seconds gets one sound,
       // rather than an initial tone immediately followed by another tone.
       if (clock.warning || clock.escalated) entry.reminder = true;
-    } else if (clock.warning && !entry.reminder) {
+    } else if (incident.alert_type !== 'LOW_BATTERY' && clock.warning && !entry.reminder) {
       events.push({ key: incident.key, tone: 'reminder' });
       entry.reminder = true;
     }
@@ -102,9 +103,21 @@ export function incidentSnapshot(incidents) {
 }
 
 export function needsBarangayAttention(incident, now = Date.now()) {
+  const assigned = incident.alert_type === 'SOS' ? incident.details?.sos_assigned_to : null;
   return activeStatuses.has(incident.details?.status || 'PENDING_FAMILY')
     && incident.details?.incident_open !== false
-    && (incident.details?.status === 'ESCALATED_BHW' || alertClock(incident, now).escalated);
+    && (assigned ? ['barangay','both'].includes(assigned)
+      : incident.alert_type === 'LOW_BATTERY' || incident.details?.status === 'ESCALATED_BHW' || alertClock(incident, now).escalated);
+}
+
+export function alertTitle(incident) {
+  return incident?.alert_type === 'SOS' ? 'SOS alert'
+    : incident?.alert_type === 'LOW_BATTERY' ? 'Low watch battery' : 'Outside the safe zone';
+}
+
+export function batteryAlertMessage(incident) {
+  const value = incident?.details?.battery_percent;
+  return `Watch battery${Number.isFinite(value) ? ` at ${value}%` : ' is low'}. Please charge the watch soon.`;
 }
 
 export function confirmationErrorMessage(error) {
