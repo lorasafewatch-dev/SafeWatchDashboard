@@ -4,6 +4,7 @@ import { dashboardLocationAt, parseGpsPoint } from '../../shared/gpsLocation.js'
 import { MapNavigation, SafeWatchTiles } from '../../shared/components/SafeWatchMap.jsx';
 import { ALERT_QUERY_FILTER, acknowledgeIncident, alertTitle, batteryAlertMessage, confirmationErrorMessage, groupAlertIncidents, needsBarangayAttention } from '../../shared/alertLifecycle.js';
 import LocationHistory from '../../shared/components/LocationHistory.jsx';
+import ActivityHistory from '../../shared/components/ActivityHistory.jsx';
 import NotificationBell from '../../shared/components/NotificationBell.jsx';
 import SosResponseUpdates, { SosResponseIndicator } from '../../shared/components/SosResponseStatus.jsx';
 import { loadSosResponses, mergeSosResponse, respondToSos, sosResponseError, sosResponseState } from '../../shared/sosResponse.js';
@@ -687,6 +688,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         </MapContainer>
         <div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Trusted hub</span></div>
       </AdminOverview>;
+    } else if (activeTab === 'Activity & Alert History') {
+      return <div className="admin-page"><ActivityHistory key={userId} client={supabase} seniors={seniors}/></div>;
     } else if (activeTab === 'Location History') {
       const selected = seniors.find(senior => senior.id === historyDeviceId) || seniors[0];
       return <div className="admin-page">
@@ -1262,6 +1265,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           <SidebarItem icon={HeartPulse} label="Health Overview" onClick={() => navigate('Health Overview')} active={activeTab === 'Health Overview'} />
           <SidebarItem icon={Map} label="Geofence Zones" onClick={() => navigate('Geofence Zones')} active={activeTab === 'Geofence Zones'} />
           <SidebarItem icon={Bell} label="Alerts" onClick={() => navigate('SOS Alerts')} active={activeTab === 'SOS Alerts'} badge={sosAlerts.length || null} />
+          <SidebarItem icon={Activity} label="Activity & Alert History" onClick={() => navigate('Activity & Alert History')} active={activeTab === 'Activity & Alert History'} />
           <SidebarItem icon={Settings} label="Settings" onClick={() => navigate('Settings')} active={activeTab === 'Settings'} />
           <SidebarItem icon={HelpCircle} label="Help & Support" onClick={() => navigate('Help & Support')} active={activeTab === 'Help & Support'} />
         </nav>

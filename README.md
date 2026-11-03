@@ -25,3 +25,9 @@ Before deployment, apply these additive migrations after the existing family-saf
 See [bell notifications](docs/BELL_NOTIFICATIONS.md), [SOS handoffs](docs/SOS_RESPONSE_HANDOFF.md),
 and [battery and location history](docs/BATTERY_AND_LOCATION_HISTORY.md).
 Publishing this web app does not apply the Supabase database migrations.
+
+## Activity log and alert history
+
+See [the feature and migration notes](docs/ACTIVITY_AND_ALERT_HISTORY.md).
+Families open Alerts → Activity log & alert history. Staff open Activity & Alert History.
+Date-filtered location routes remain available in both apps.

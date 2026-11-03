@@ -1,0 +1,22 @@
+.watch-activity { color: #183e36; background: #fffffff2; border: 1px solid #d8e5dc; border-radius: 22px; padding: clamp(16px, 3vw, 28px); min-width: 0; }
+.watch-activity h2 { margin: 0 0 8px; font-size: 22px; font-weight: 750; }
+.watch-activity h3 { font-size: 16px; font-weight: 700; margin: 10px 0 4px; }
+.watch-activity p { font-size: 13px; line-height: 1.6; margin: 6px 0; }
+.watch-activity__filters { display: flex; flex-wrap: wrap; gap: 14px; margin: 22px 0; }
+.watch-activity label { display: grid; flex: 1 1 150px; gap: 6px; min-width: 0; font-size: 13px; font-weight: 650; }
+.watch-activity input, .watch-activity select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #afc8b9; background: white; color: #183e36; padding: 10px; border-radius: 10px; font: inherit; }
+.watch-activity button { font: inherit; cursor: pointer; min-height: 44px; }
+.watch-activity button:disabled { opacity: .55; cursor: wait; }
+.watch-activity :is(button, input, select):focus-visible { outline: 3px solid #368c73; outline-offset: 3px; }
+.watch-activity__summary, .watch-activity__record-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+.watch-activity__summary button, .watch-activity__error button { font-weight: 700; text-decoration: underline; }
+.watch-activity__list { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 12px; }
+.watch-activity__list article { border: 1px solid #dae6de; border-radius: 14px; padding: 16px; overflow-wrap: anywhere; }
+.watch-activity__record-top time { color: #536d60; }
+.watch-activity__category { border-radius: 20px; padding: 5px 10px; background: #e6f3eb; font-weight: 700; }
+.watch-activity__category--alerts { background: #fff0d7; color: #764810; }
+.watch-activity__category--system { background: #eaf0fa; color: #274c78; }
+.watch-activity__status { font-weight: 700; }
+.watch-activity__note { color: #536d60; }
+.watch-activity__error { color: #a32d23; }
+.watch-activity__more { padding: 10px 18px; border: 1px solid #a8c6b3; border-radius: 10px; background: #ecf6ef; color: #12563a; font-weight: 700 !important; }
