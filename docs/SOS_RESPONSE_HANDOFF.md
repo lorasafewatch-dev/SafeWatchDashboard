@@ -5,7 +5,9 @@ Apply `supabase/migrations/20261103_sos_response_handoff.sql` after
 migration preserves existing incidents, confirmations, devices and family links.
 
 The family app's SOS popup and Alerts page offer **Confirm response** and
-**Decline — notify barangay secretary**. The secretary can confirm or choose
+**Can’t respond — notify barangay**. This immediately notifies the barangay
+secretary or admin. A saved family decline displays **Barangay already notified**.
+The secretary can confirm or choose
 **Decline — notify family** in the dashboard overview, Alerts page and alert details.
 Decline means the person cannot respond; it is not dismissal or cancellation.
 

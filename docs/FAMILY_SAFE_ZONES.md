@@ -10,7 +10,7 @@ Choosing a center works before the watch has its first GPS fix.
 Each watch has one active family zone. Saving it replaces that watch's default
 San Isidro East boundary. All approved families linked to that watch see the same
 zone. Other watches keep their own settings. **Edit safe zone** changes a zone;
-**Use default boundary** restores San Isidro East after an inline confirmation.
+**Restore San Isidro East** restores the default boundary after an inline confirmation.
 Canceling an edit does not save it. Failed saves retain the draft. A concurrent
 change by another family requires canceling and reopening the refreshed editor.
 

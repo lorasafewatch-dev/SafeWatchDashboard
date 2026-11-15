@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { getDashboardClient, verifyDashboardPassword } from './supabaseClient.js';
 import AccountSettings from './components/AccountSettings.jsx';
+import HelpSupport from './components/HelpSupport.jsx';
 import DeleteSeniorDialog from './components/DeleteSeniorDialog.jsx';
 import LogoutConfirmation from '../../shared/components/LogoutConfirmation.jsx';
 import StatCard from './components/StatCard.jsx';
@@ -1212,41 +1213,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     } else if (activeTab === 'Settings') {
       return <AccountSettings key={userId} client={supabase} user={accountUser} permission={accountPermission} onUpdated={retryAuth} verifyCurrentPassword={verifyCurrentPassword} />;
     } else if (activeTab === 'Help & Support') {
-      return (
-        <div className="admin-page admin-help">
-          <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100 max-w-2xl">
-            <h3 className="text-2xl font-bold text-slate-800 mb-2">Contact Support</h3>
-            <p className="text-sm text-slate-400 font-medium mb-10">Need more help? Our support team is ready to assist you.</p>
-
-            <div className="space-y-8 mb-10">
-              <div className="flex items-center gap-6">
-                <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
-                  <Bell className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-800">Email Support</p>
-                  <p className="text-emerald-600 font-bold">shamelsolmia@gmail.com</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-6">
-                <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
-                  <MapPin className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-800">Phone Support</p>
-                  <p className="text-emerald-600 font-bold">09123456789</p>
-                  <p className="text-xs text-slate-400 font-medium">Mon - Fri, 8:00 AM - 5:00 PM</p>
-                </div>
-              </div>
-            </div>
-
-            <button className="w-full py-4 rounded-2xl border-2 border-emerald-500 text-emerald-600 font-bold text-sm hover:bg-emerald-50 transition-all flex items-center justify-center gap-2">
-              <Eye className="w-4 h-4" /> Send us a Message
-            </button>
-          </div>
-        </div>
-      );
+      return <HelpSupport/>;
     }
   };
 

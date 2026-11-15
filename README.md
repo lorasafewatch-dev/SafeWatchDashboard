@@ -31,3 +31,8 @@ Publishing this web app does not apply the Supabase database migrations.
 See [the feature and migration notes](docs/ACTIVITY_AND_ALERT_HISTORY.md).
 Families open Alerts → Activity log & alert history. Staff open Activity & Alert History.
 Date-filtered location routes remain available in both apps.
+
+## Family SOS, default zone and support contacts
+
+See [the PDF feature review](docs/PDF_FEATURE_REVIEW.md) for the clearer SOS
+handoff button, San Isidro East reset, and updated support email/call links.
