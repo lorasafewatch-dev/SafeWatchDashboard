@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { isCurrentGpsPoint, telemetryTimestamp } from '../../shared/gpsStatus.js';
 import { dashboardLocationAt, parseGpsPoint } from '../../shared/gpsLocation.js';
-import { MapNavigation, SafeWatchTiles } from '../../shared/components/SafeWatchMap.jsx';
+import MapViewport from '../../shared/components/MapViewport.jsx';
 import { ALERT_QUERY_FILTER, acknowledgeIncident, alertTitle, batteryAlertMessage, confirmationErrorMessage, groupAlertIncidents } from '../../shared/alertLifecycle.js';
 import LocationHistory from '../../shared/components/LocationHistory.jsx';
 import NotificationBell from '../../shared/components/NotificationBell.jsx';
@@ -11,7 +11,7 @@ import { withRequestTimeout } from '../../shared/requestTimeout.js';
 import { enableAlertSounds, playAlertSound, stopAlertSounds } from '../../shared/alertSound.js';
 import { SAN_ISIDRO_EAST_BOUNDARY } from '../../shared/safeZone.js';
 import { familyZoneContains } from '../../shared/familySafeZone.js';
-import { MapContainer, Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
+import { Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { createSeniorMarker } from '../../shared/mapMarker.js';
@@ -166,7 +166,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [selectedSeniorLoc, setSelectedSeniorLoc] = useState(null);
   const [geofenceCenter, setGeofenceCenter] = useState(null);
   const [geofenceCenterTrigger, setGeofenceCenterTrigger] = useState(0);
-  const [mapStyle, setMapStyle] = useState('standard');
+  const [geofenceMapStyle, setGeofenceMapStyle] = useState('standard');
   const [mapSearch, setMapSearch] = useState('');
   const [zoneSearch, setZoneSearch] = useState('');
   const [historyDeviceId, setHistoryDeviceId] = useState('');
@@ -719,22 +719,21 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       return <AdminOverview seniors={seniors} alerts={visibleAlerts} now={liveTime.getTime()}
         onNavigate={navigate} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} onDecline={incident => handleSosResponse(incident, 'declined')} confirming={confirmingAlerts}
         onLocate={senior => { setSelectedSeniorLoc([senior.lat, senior.lng]); navigate('Live Location'); }}>
-        <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
-          <SafeWatchTiles /><MapNavigation bounds={sanIsidroEastGeofence} />
+        <MapViewport label="Dashboard live location map" className="h-full" bounds={sanIsidroEastGeofence}
+          legend={<div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Trusted hub</span></div>}>
           <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
           {seniors.filter(senior => senior.safeZone).map(senior => <Circle key={`family-zone-${senior.id}`} center={[senior.safeZone.lat, senior.safeZone.lng]} radius={senior.safeZone.radius} pathOptions={{ color: '#009a70', fillOpacity: .12, weight: 2 }}><Popup>{senior.name}: {senior.safeZone.name} · Family safe zone</Popup></Circle>)}
           {trustedLocations.map(loc => <Circle key={loc.id} center={[loc.lat, loc.lng]} radius={loc.radius} pathOptions={{ color: '#3492b0', fillColor: '#3492b0', fillOpacity: 0.1, weight: 2, dashArray: '5, 10' }} />)}
           {seniors.filter(senior => senior.hasGpsLock).map(senior => <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)}>
             <Popup><strong>{senior.name}</strong><br/>{senior.status}<br/>Updated {watchUpdate(senior, liveTime.getTime()).label}</Popup>
           </Marker>)}
-        </MapContainer>
-        <div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Trusted hub</span></div>
+        </MapViewport>
       </AdminOverview>;
     } else if (activeTab === 'Location History') {
       const selected = seniors.find(senior => senior.id === historyDeviceId) || seniors[0];
       return <div className="admin-page">
         <div className="bg-white rounded-2xl p-5 mb-5"><SeniorPicker label="Senior for location history" seniors={seniors} value={selected?.id || ''} onChange={setHistoryDeviceId}/></div>
-        {selected ? <LocationHistory key={`${userId}:${selected.id}`} client={supabase} deviceId={selected.id} name={selected.name}/> : <p>No seniors available to review.</p>}
+        {selected ? <LocationHistory key={`${userId}:${selected.id}`} client={supabase} deviceId={selected.id} name={selected.name} mapControls/> : <p>No seniors available to review.</p>}
       </div>;
     } else if (activeTab === 'Senior Monitoring') {
       const filteredSeniors = seniors.filter(s => {
@@ -755,13 +754,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
           {/* Table Section */}
           <div className="card overflow-hidden">
-            <div className="px-6 py-4 border-b border-[#e2e8d8] flex justify-between items-center">
-              <div className="flex items-center gap-3 flex-1 max-w-lg">
-                <div className="relative flex-1">
+            <div className="admin-senior-toolbar">
+              <div className="admin-senior-filters">
+                <div className="admin-senior-search relative">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input aria-label="Search seniors" type="text" placeholder="Search senior by name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field !pl-10" />
                 </div>
-                <select aria-label="Filter seniors by location status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field !w-auto">
+                <select aria-label="Filter seniors by location status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field">
                   <option value="All Status">All Status</option>
                   <option value="Inside Safe Zone">Inside Safe Zone</option>
                   <option value="Trusted Location">Trusted Location</option>
@@ -770,19 +769,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <option value="SOS ALERT!">SOS ALERT!</option>
                 </select>
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setIsAddingSenior(true)}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Register Senior
-                </button>
-              </div>
+              <button type="button" onClick={() => setIsAddingSenior(true)} className="btn-primary">
+                <Plus className="w-4 h-4" aria-hidden="true" /> Register Senior
+              </button>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full admin-record-table admin-monitoring-table">
                 <thead>
                   <tr className="bg-[#f7f9f4]">
                     <th className="table-header">Senior</th>
@@ -800,17 +793,17 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   {filteredSeniors.map(senior => (
                     <tr key={senior.id} className="hover:bg-[#f7f9f4]/50 transition-colors">
                       <td className="table-cell text-sm">
-                        <div className="flex items-center gap-3">
+                        <div className="admin-record-person">
                           <SeniorPhoto senior={senior} className="w-9 h-9 rounded-full bg-[#f7f9f4]" />
                           <div>
                             <p className="font-semibold text-gray-800">{senior.name}</p>
-                            <p className="text-[10px] text-gray-400">ID: {senior.phone}</p>
+                            <p className="admin-record-secondary admin-record-id">ID: {senior.phone}</p>
                           </div>
                         </div>
                       </td>
                       <td className="table-cell">
                         <p className="font-bold text-slate-600">{senior.age}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">{senior.gender}</p>
+                        <p className="admin-record-secondary">{senior.gender}</p>
                       </td>
                       <td className="table-cell">
                         <span className={`badge ${senior.type === 'trusted' ? 'badge-blue' : senior.type === 'sos' ? 'badge-red' : senior.type === 'normal' ? 'badge-green' : 'badge-orange'}`}>
@@ -819,38 +812,37 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </td>
                       <td className="table-cell">
                         <p className="font-semibold text-slate-700">{readingText(senior, 'pulse', ' bpm')}</p>
-                        <span><ReadingLabel senior={senior} field="pulse" now={liveTime.getTime()} /></span>
+                        <ReadingLabel senior={senior} field="pulse" now={liveTime.getTime()} />
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center gap-1.5">
                           <Battery className={`w-4 h-4 ${senior.battery != null && senior.battery <= 20 ? 'text-red-500 rotate-180' : 'text-emerald-500'}`} />
                           <p className="font-bold text-slate-600">{readingText(senior, 'battery', '%')}</p>
                         </div>
-                        <span><ReadingLabel senior={senior} field="battery" now={liveTime.getTime()} /></span>
+                        <ReadingLabel senior={senior} field="battery" now={liveTime.getTime()} />
                       </td>
                       <td className="table-cell">
-                        <p className="font-medium text-slate-600 leading-tight">{senior.location.split(',')[0]}</p>
-                        <p className="text-[10px] text-slate-400 font-bold">{senior.location.split(',')[1]}</p>
+                        <p className="font-medium text-slate-600">{senior.location.split(',')[0]}</p>
+                        {senior.location.includes(',') && <p className="admin-record-secondary">{senior.location.split(',')[1]}</p>}
                       </td>
                       <td className="table-cell text-xs" title="Signal measured by the gateway for the last received packet; it is not a live connection reading.">
                         {senior.rssi !== null && senior.snr !== null ? (
-                          <><p className="font-semibold text-slate-700">RSSI {senior.rssi.toFixed(1)} dBm</p><p className="text-slate-500">SNR {senior.snr.toFixed(1)} dB</p></>
+                          <><p className="font-semibold text-slate-700">RSSI {senior.rssi.toFixed(1)} dBm</p><p className="admin-record-secondary">SNR {senior.snr.toFixed(1)} dB</p></>
                         ) : <span className="text-gray-400">No measurement</span>}
                       </td>
                       <td className="table-cell text-xs">
                         <p className="font-bold text-slate-800">{senior.time}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">{senior.date}</p>
+                        <p className="admin-record-secondary">{senior.date}</p>
                       </td>
                       <td className="table-cell">
-                        <div className="flex flex-wrap gap-2">
-                        <button type="button" aria-label={`View ${senior.name}, Watch ID ${senior.id}`} onClick={() => setViewingSeniorId(senior.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-bold hover:bg-emerald-100 transition-all">
-                          <Eye className="w-4 h-4" />
-                          <span className="text-[10px]">View</span>
-                        </button>
-                        <button type="button" onClick={() => setEditingPhoto(senior)} className="rounded-lg px-3 py-2 bg-emerald-50 text-emerald-700 font-bold">Edit photo</button>
-                        <button type="button" onClick={() => { setDeletingSenior(senior); setSeniorMessage(''); }} aria-label={`Delete Watch for ${senior.name}`} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 rounded-lg font-bold hover:bg-red-100 transition-all">
-                          <Trash2 className="w-4 h-4" aria-hidden="true"/><span className="text-xs">Delete Watch</span>
-                        </button>
+                        <div className="admin-row-actions">
+                          <button type="button" aria-label={`View ${senior.name}, Watch ID ${senior.id}`} onClick={() => setViewingSeniorId(senior.id)} className="admin-action-button">
+                            <Eye aria-hidden="true" />View
+                          </button>
+                          <button type="button" onClick={() => setEditingPhoto(senior)} className="admin-action-button">Edit photo</button>
+                          <button type="button" onClick={() => { setDeletingSenior(senior); setSeniorMessage(''); }} aria-label={`Delete Watch for ${senior.name}`} className="admin-action-button admin-action-button--danger">
+                            <Trash2 aria-hidden="true" />Delete Watch
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -910,9 +902,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
           {/* Map Container */}
           <div className="flex-1 relative rounded-[2.5rem] overflow-hidden border border-white shadow-[0_8px_30px_rgb(0,0,0,0.06)] bg-slate-100 z-0">
-            <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
-              <SafeWatchTiles />
-              <MapNavigation bounds={sanIsidroEastGeofence} />
+            <MapViewport label="Live Location map" className="h-full" bounds={sanIsidroEastGeofence}>
               <MapController center={selectedSeniorLoc} zoom={18} />
               {seniors.filter(senior => senior.hasGpsLock).map(senior => (
                 <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)}>
@@ -932,7 +922,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               ))}
               <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
               {seniors.filter(senior => senior.safeZone).map(senior => <Circle key={`family-zone-${senior.id}`} center={[senior.safeZone.lat, senior.safeZone.lng]} radius={senior.safeZone.radius} pathOptions={{ color: '#009a70', fillOpacity: .12, weight: 2 }}><Popup>{senior.name}: {senior.safeZone.name} · Family safe zone</Popup></Circle>)}
-            </MapContainer>
+            </MapViewport>
 
           </div>
         </div>
@@ -1027,34 +1017,32 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              <table className="w-full admin-record-table admin-alert-table">
                 <thead>
                   <tr className="bg-slate-50/50">
-                    <th className="table-header py-6">Senior</th>
-                    <th className="table-header py-6">Alert Time</th>
-                    <th className="table-header py-6">Alert</th>
-                    <th className="table-header py-6 text-right">Actions</th>
+                    <th className="table-header">Senior</th>
+                    <th className="table-header">Alert Time</th>
+                    <th className="table-header">Alert</th>
+                    <th className="table-header">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {visibleAlerts.filter(alert => alert.seniorName?.toLowerCase().includes(alertSearch.trim().toLowerCase())).map(alert => (
                     <tr key={alert.id} className="hover:bg-slate-50/30 transition-colors">
-                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-4">
-                          <SeniorPhoto deviceId={alert.device_id} className="w-14 h-14 rounded-full bg-slate-100" />
+                      <td className="table-cell">
+                        <div className="admin-record-person">
+                          <SeniorPhoto deviceId={alert.device_id} className="w-9 h-9 rounded-full bg-slate-100" />
                           <div>
-                            <p className="font-bold text-slate-800 text-base">{alert.seniorName}</p>
-                            <p className="text-xs text-slate-400 font-bold tracking-wider">ID: {alert.seniorId}</p>
+                            <p className="font-semibold text-slate-800">{alert.seniorName}</p>
+                            <p className="admin-record-secondary admin-record-id">ID: {alert.seniorId}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-8 py-6">
-                        <div className="text-slate-600">
-                          <p className="font-bold text-sm">{alert.date}</p>
-                          <p className="text-xs font-medium text-slate-400">{alert.time}</p>
-                        </div>
+                      <td className="table-cell whitespace-nowrap">
+                        <p className="font-semibold text-slate-800">{alert.date}</p>
+                        <p className="admin-record-secondary">{alert.time}</p>
                       </td>
-                      <td className="px-8 py-6">
+                      <td className="table-cell">
                         <p className="font-bold text-sm mb-2">{alertTitle(alert)}</p>
                         {alert.rawType === 'LOW_BATTERY' && <p className="text-xs mb-2">{batteryAlertMessage(alert)}</p>}
                         <SosResponseIndicator incident={alert}/>
@@ -1063,10 +1051,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                           <span className="text-[10px] font-black uppercase tracking-wider">{alert.rawType === 'LOW_BATTERY' ? 'Charge watch' : alert.status === 'ESCALATED_BHW' ? 'Escalated' : alert.status === 'PENDING_FAMILY' ? 'Awaiting response' : alert.status}</span>
                         </div>
                       </td>
-                      <td className="px-8 py-6 text-right">
-                        <button type="button" onClick={() => openAlertDetails(alert)} className="px-4 py-2 text-emerald-700 text-sm font-bold underline">View details</button>
-                        <button data-confirm-alert disabled={confirmingAlerts} onClick={() => handleDismissAlertDB(alert)} className="px-4 py-2 bg-slate-800 text-white text-[10px] font-black uppercase rounded-lg hover:bg-slate-900 transition-all disabled:opacity-50">Confirm response</button>
-                        {alert.alert_type === 'SOS' && <button data-confirm-alert disabled={confirmingAlerts || sosResponseState(alert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(alert, 'declined')} className="sos-decline-button block">Decline — notify family</button>}
+                      <td className="table-cell">
+                        <div className="admin-row-actions">
+                          <button type="button" onClick={() => openAlertDetails(alert)} className="admin-action-button">View details</button>
+                          <button type="button" data-confirm-alert disabled={confirmingAlerts} onClick={() => handleDismissAlertDB(alert)} className="admin-action-button admin-action-button--confirm">Confirm response</button>
+                          {alert.alert_type === 'SOS' && <button type="button" data-confirm-alert disabled={confirmingAlerts || sosResponseState(alert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(alert, 'declined')} className="admin-action-button admin-action-button--decline">Decline — notify family</button>}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1168,9 +1158,19 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <div className="p-4 bg-slate-50/50 text-[10px] text-slate-400 font-medium px-8">Showing {filteredHubs.length + Number(mainZoneMatches)} zones</div>
             </div>
             <div className="col-span-3 relative rounded-[2.5rem] overflow-hidden border border-white shadow-[0_8px_30px_rgb(0,0,0,0.06)] bg-white h-[500px]">
-              <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [32, 32] }} className="h-full w-full" zoomControl={false}>
-                <SafeWatchTiles variant={mapStyle} />
-                <MapNavigation bounds={sanIsidroEastGeofence} />
+              <MapViewport label="Geofence Zones map" className="h-full" bounds={sanIsidroEastGeofence} variant={geofenceMapStyle} onVariantChange={setGeofenceMapStyle}
+                footer={isPickingLocation && <form className="admin-hub-picker" onSubmit={event => {
+                  event.preventDefault();
+                  event.currentTarget.closest('dialog')?.close();
+                  setIsPickingLocation(false);
+                  setIsAddingLocationDetails(true);
+                }}>
+                  <p role="status">{newLocation.lat ? 'Location selected. Click the map again to change it.' : 'Click the map to place the safe hub.'}</p>
+                  <div>
+                    <button type="button" onClick={() => setIsPickingLocation(false)} className="admin-action-button">Cancel hub placement</button>
+                    {newLocation.lat && <button type="submit" className="admin-action-button admin-action-button--confirm">Confirm location</button>}
+                  </div>
+                </form>}>
                 <MapController center={geofenceCenter} zoom={17} trigger={geofenceCenterTrigger} bounds={sanIsidroEastGeofence} />
                 <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
                 <LocationPicker />
@@ -1198,46 +1198,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     />
                   </>
                 )}
-              </MapContainer>
-
-              {/* Map Style Toggle */}
-              <div className="absolute top-6 left-6 z-[1000]">
-                <button
-                  onClick={() => setMapStyle(prev => prev === 'standard' ? 'satellite' : 'standard')}
-                  className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl shadow-lg border border-white text-[10px] font-black uppercase tracking-widest text-slate-700 hover:text-[#4a7c59] transition-all flex items-center gap-2"
-                >
-                  <Map className="w-4 h-4" />
-                  {mapStyle === 'standard' ? 'Satellite View' : 'Standard View'}
-                </button>
-              </div>
-
-              {isPickingLocation && (
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-4 animate-enter">
-                  <div className="bg-white/90 backdrop-blur-md text-slate-800 px-6 py-3 rounded-2xl shadow-xl border border-white text-sm font-bold flex items-center gap-3">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-                    {newLocation.lat ? 'Location selected. Click the map again to change it.' : 'Tap anywhere on the map to place the hub.'}
-                  </div>
-                  {newLocation.lat && (
-                    <button
-                      onClick={() => {
-                        setIsPickingLocation(false);
-                        setIsAddingLocationDetails(true);
-                      }}
-                      className="px-8 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-500/30 hover:bg-blue-700 transition-all uppercase tracking-widest text-sm flex items-center gap-2 hover:-translate-y-1"
-                    >
-                      <MapPin className="w-5 h-5" /> Confirm Location
-                    </button>
-                  )}
-                </div>
-              )}
-              {isPickingLocation && (
-                 <button type="button" aria-label="Cancel hub placement"
-                  onClick={() => setIsPickingLocation(false)}
-                  className="absolute top-6 right-20 z-[1000] w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              )}
+              </MapViewport>
             </div>
           </div>
         </div>
@@ -1396,7 +1357,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <h3 className="text-lg font-bold tracking-tight">Name Your Safe Hub</h3>
                 <p className="text-blue-100 text-[9px] font-bold mt-0.5 uppercase tracking-widest">Finalize safe zone details.</p>
               </div>
-              <button onClick={() => setIsAddingLocationDetails(false)} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-all relative z-10">
+              <button type="button" aria-label="Close safe hub details" onClick={() => setIsAddingLocationDetails(false)} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-all relative z-10">
                 <X className="w-5 h-5" />
               </button>
             </div>

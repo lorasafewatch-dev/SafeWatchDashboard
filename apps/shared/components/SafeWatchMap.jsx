@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { TileLayer, ZoomControl, useMap } from 'react-leaflet';
+import { TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { EMPTY_MAP_TILE, MAP_LAYERS } from '../mapTiles.js';
 
@@ -16,7 +16,7 @@ function MapSizeSync() {
     let frame;
     const resize = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => map.invalidateSize({ pan: false, debounceMoveend: true }));
+      frame = requestAnimationFrame(() => map.invalidateSize({ debounceMoveend: true }));
     };
     const observer = new ResizeObserver(resize);
     observer.observe(map.getContainer());
@@ -27,6 +27,13 @@ function MapSizeSync() {
 }
 
 export function SafeWatchTiles({ variant = 'standard' }) {
+  return <>
+    <MapBackground key={variant} variant={variant} />
+    <MapSizeSync />
+  </>;
+}
+
+function MapBackground({ variant }) {
   const provider = MAP_LAYERS[variant] || MAP_LAYERS.standard;
   const layer = useRef(null);
   const failedInBatch = useRef(false);
@@ -38,10 +45,9 @@ export function SafeWatchTiles({ variant = 'standard' }) {
   }), []);
   return <>
     {/* OSM receives the public origin, never an account path or query. */}
-    <TileLayer key={variant} ref={layer} url={provider.url} attribution={provider.attribution}
+    <TileLayer ref={layer} url={provider.url} attribution={provider.attribution}
       referrerPolicy="origin" maxNativeZoom={provider.maxNativeZoom} maxZoom={20}
       noWrap updateWhenIdle keepBuffer={1} errorTileUrl={EMPTY_MAP_TILE} eventHandlers={events} />
-    <MapSizeSync />
     {unavailable && <MapNotice onRetry={() => {
       failedInBatch.current = false;
       setUnavailable(false);
@@ -57,17 +63,4 @@ function MapNotice({ onRetry }) {
     <p>Map background unavailable. Check your connection and try again. Location markers may still be shown.</p>
     <button type="button" onClick={onRetry} className="mt-2 font-bold underline">Retry map</button>
   </div>;
-}
-
-export function MapNavigation({ bounds }) {
-  const map = useMap();
-  const container = useRef(null);
-  useEffect(() => { L.DomEvent.disableClickPropagation(container.current); L.DomEvent.disableScrollPropagation(container.current); }, []);
-  return <>
-    <ZoomControl position="topright" />
-    <div ref={container} className="absolute top-[90px] right-[10px] z-[1000]">
-      <button type="button" onClick={() => { map.stop(); map.fitBounds(bounds, { padding: [32, 32], maxZoom: 16, animate: false }); }}
-        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-emerald-800 shadow">Show boundary</button>
-    </div>
-  </>;
 }

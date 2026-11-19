@@ -1,0 +1,139 @@
+.watch-map {
+  min-width: 0;
+}
+
+.watch-map__inline, .watch-map__viewport {
+  height: 100%;
+}
+
+.watch-map__viewport {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fcfffd;
+  container-type: inline-size;
+}
+
+.watch-map__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid #dce9e2;
+}
+
+.watch-map__layers, .watch-map__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+
+.watch-map__layers {
+  padding: 2px;
+  border: 1px solid #dce9e2;
+  border-radius: 10px;
+  background: #eff5f1;
+}
+
+.watch-map__actions {
+  margin-inline-start: auto;
+  justify-content: flex-end;
+}
+
+.watch-map .watch-map__toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #3d6258;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.watch-map .watch-map__toolbar button:hover {
+  background: #e7f4ec;
+  color: #00654f;
+}
+
+.watch-map .watch-map__toolbar button:focus-visible {
+  outline: 2px solid #008e70;
+  outline-offset: 2px;
+}
+
+.watch-map .watch-map__layers button[aria-pressed="true"] {
+  border-color: #d7e8df;
+  background: #fff;
+  color: #00654f;
+}
+
+.watch-map .watch-map__actions button {
+  border-color: #cde2d7;
+  background: #f5fbf7;
+  color: #00654f;
+}
+
+.watch-map__toolbar button svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.watch-map__canvas {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.watch-map__canvas > .leaflet-container {
+  width: 100%;
+  height: 100%;
+}
+
+.watch-map__legend {
+  padding: 8px 12px;
+  border-top: 1px solid #dce9e2;
+}
+
+.watch-map__dialog {
+  position: fixed;
+  inset: 0;
+  width: min(calc(100% - 24px), 1600px);
+  height: calc(100dvh - 24px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid #cde2d7;
+  border-radius: 16px;
+  overflow: hidden;
+  color: inherit;
+  background: #fcfffd;
+  box-shadow: 0 12px 48px #13382d40;
+}
+
+.watch-map__dialog::backdrop {
+  background: #112b2acc;
+}
+
+@container (max-width: 355px) {
+  .watch-map__layers, .watch-map__actions {
+    flex: 1 1 100%;
+  }
+
+  .watch-map__toolbar button {
+    flex: 1;
+  }
+}

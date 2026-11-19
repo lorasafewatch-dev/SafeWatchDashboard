@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Circle, MapContainer, Polygon, Popup, ZoomControl, useMap } from 'react-leaflet';
-import { Check, Clock, Expand, History, Info, Layers, MapPin, Satellite, ShieldCheck } from 'lucide-react';
-import { SafeWatchTiles } from '../../../shared/components/SafeWatchMap.jsx';
+import { Circle, Polygon, Popup, useMap } from 'react-leaflet';
+import { Check, Clock, History, Info, MapPin, ShieldCheck } from 'lucide-react';
+import MapViewport from '../../../shared/components/MapViewport.jsx';
 import SeniorMapMarker from '../../../shared/components/SeniorMapMarker.jsx';
 import SeniorPhoto from '../../../shared/components/SeniorPhoto.jsx';
 import { familyZoneBounds, familyZoneContains } from '../../../shared/familySafeZone.js';
@@ -14,7 +14,7 @@ import { isAcknowledgedSos, isPendingSos, responseMapIncidents, responseMapPosit
 import './SosResponseMap.css';
 
 const coordinates = point => `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
-const fitOptions = { paddingTopLeft: [64, 80], paddingBottomRight: [64, 48], maxZoom: 17, animate: false };
+const fitOptions = { padding: [32, 32], maxZoom: 17, animate: false };
 const nameOf = (incident, seniors) => seniors.find(senior => senior.id === incident.device_id)?.name || incident.devices?.patient_name || incident.seniorName || 'Senior';
 
 function FitResponseMap({ bounds, fitKey }) {
@@ -29,17 +29,23 @@ function FitResponseMap({ bounds, fitKey }) {
     }
   }, [map, fitKey, boundsKey]);
   useEffect(() => {
-    const fit = () => map.fitBounds(JSON.parse(boundsKey), fitOptions);
-    map.on('resize', fit);
-    return () => { map.off('resize', fit); };
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    function fitAfterViewportResize() {
+      if (width === window.innerWidth && height === window.innerHeight) return;
+      width = window.innerWidth;
+      height = window.innerHeight;
+      map.fitBounds(JSON.parse(boundsKey), fitOptions);
+    }
+    map.on('resize', fitAfterViewportResize);
+    return () => { map.off('resize', fitAfterViewportResize); };
   }, [map, boundsKey]);
   return null;
 }
 
-function IncidentMap({ client, incident, senior, now, variant }) {
+function IncidentMap({ client, incident, senior, now, variant, onVariantChange }) {
   const [gps, setGps] = useState({ observation: null, error: '', loading: true });
   const [revision, setRevision] = useState(0);
-  const [fitRevision, setFitRevision] = useState(0);
   const refreshAt = senior?.positionAt;
   useEffect(() => {
     let active = true;
@@ -60,17 +66,15 @@ function IncidentMap({ client, incident, senior, now, variant }) {
   const latestTitle = live ? 'Current watch location' : 'Last reported location';
   const samePoint = sos && latest && Math.abs(sos.point.lat - latest.point.lat) < .000001 && Math.abs(sos.point.lng - latest.point.lng) < .000001;
   return <>
-    <div className="sos-response-map__heading"><div><h2>SOS response map</h2><p>{name} · {geofence.name}</p></div><button type="button" onClick={() => setFitRevision(value => value + 1)}><Expand aria-hidden="true"/>Fit map</button></div>
-    <div role="region" aria-label="SOS location map" className="sos-response-map__canvas" data-map-style={variant}>
-      <MapContainer bounds={visibleBounds} boundsOptions={fitOptions} zoomControl={false} scrollWheelZoom={false}>
-        <SafeWatchTiles variant={variant}/><ZoomControl position="bottomright"/>
-        <FitResponseMap bounds={visibleBounds} fitKey={`${incident.id}:${geofence.name}:${fitRevision}`}/>
+    <div className="sos-response-map__heading"><h2>SOS response map</h2><p>{name} · {geofence.name}</p></div>
+    <MapViewport label="SOS location map" className="sos-response-map__canvas" bounds={visibleBounds} fitOptions={fitOptions} scrollWheelZoom={false}
+      variant={variant} onVariantChange={onVariantChange}
+      legend={<div className="sos-response-map__legend"><span><i className="is-sos"/>Saved SOS pin</span><span><i className={live ? 'is-live' : 'is-last'}/>{live ? 'Current watch location' : 'Last reported location'}</span><span><i className="is-zone"/>Assigned geofence</span></div>}>
+        <FitResponseMap bounds={visibleBounds} fitKey={`${incident.id}:${geofence.name}`}/>
         {!geofence.unavailable && (geofence.zone ? <Circle center={[geofence.zone.lat, geofence.zone.lng]} radius={geofence.zone.radius} pathOptions={{ color: '#079b70', fillColor: '#34c997', fillOpacity: .17, weight: 3 }}><Popup>{geofence.name} · {geofence.zone.radius} m assigned geofence</Popup></Circle> : <Polygon positions={SAN_ISIDRO_EAST_BOUNDARY} pathOptions={{ color: '#079b70', fillColor: '#34c997', fillOpacity: .14, weight: 3 }}><Popup>San Isidro East · Default barangay boundary</Popup></Polygon>)}
         {sos && <SeniorMapMarker deviceId={incident.device_id} position={[sos.point.lat, sos.point.lng]} kind={samePoint ? live ? 'sos-live' : 'sos-last' : 'sos'} title={`${samePoint ? 'Saved SOS and latest watch location' : 'Saved SOS location'} for ${name}`}><Popup><strong>Saved SOS location · {name}</strong><p>{coordinates(sos.point)}</p><p>Recorded {incidentTime(sos.observedAt)}</p>{samePoint && <p>{latestTitle} recorded {incidentTime(latest.observedAt)} at this same point.</p>}<small>This pin stays at the incident location.</small></Popup></SeniorMapMarker>}
         {latest && !samePoint && <SeniorMapMarker deviceId={incident.device_id} position={[latest.point.lat, latest.point.lng]} kind={live ? 'live' : 'last'} title={`${latestTitle} for ${name}`}><Popup><strong>{latestTitle} · {name}</strong><p>{coordinates(latest.point)}</p><p>Recorded {incidentTime(latest.observedAt)}</p></Popup></SeniorMapMarker>}
-      </MapContainer>
-      <div className="sos-response-map__legend"><span><i className="is-sos"/>Saved SOS pin</span><span><i className={live ? 'is-live' : 'is-last'}/>{live ? 'Current watch location' : 'Last reported location'}</span><span><i className="is-zone"/>Assigned geofence</span></div>
-    </div>
+    </MapViewport>
     <div className="sos-response-map__facts">
       <div><span className="sos-response-map__fact-label"><MapPin aria-hidden="true"/>{latestTitle}</span><strong>{latest ? coordinates(latest.point) : gps.loading ? 'Loading watch location…' : 'No valid watch location available.'}</strong>{latest && <small>Recorded {incidentTime(latest.observedAt)}</small>}{latest && <em className={outside ? 'is-outside' : 'is-inside'}>{geofence.unavailable ? 'Geofence status unavailable' : `${outside ? 'Outside' : 'Inside'} assigned geofence`}{!live && ' · Last reported fix'}</em>}</div>
       <div><span className="sos-response-map__fact-label"><Clock aria-hidden="true"/>Saved SOS location</span><strong>{sos ? coordinates(sos.point) : 'Location unavailable at the time of SOS.'}</strong>{sos && <small>Recorded {incidentTime(sos.observedAt)}</small>}<small>Incident {incidentTime(incident.details?.sos_location?.incident_at || incident.details?.first_seen_at || incident.created_at)}</small></div>
@@ -100,7 +104,7 @@ export default function SosResponseMap({ client, seniors, active, responses, sel
         <div className="sos-response-workspace__list">{rows.map(row => <button type="button" key={row.id} aria-pressed={String(row.id) === String(incident?.id)} aria-label={`Select SOS ${row.id} for ${nameOf(row, seniors)}, Watch ID ${row.device_id}`} onClick={() => onSelect(row)}><SeniorPhoto deviceId={row.device_id}/><span><strong>{nameOf(row, seniors)}</strong><small>Watch ID: {row.device_id}</small><small>SOS · {incidentTime(row.created_at)}</small>{sosTransferLabel(row) && <small>{sosTransferLabel(row)}</small>}<em>{isAcknowledgedSos(row) ? 'Acknowledged' : isPendingSos(row) ? 'Awaiting response' : 'Incident history'}</em></span></button>)}{!rows.length && <p className="sos-response-workspace__empty">{selectedTab === 'active' ? 'No active SOS incidents.' : 'No acknowledged SOS incidents yet.'}</p>}</div>
         {incident && <><div className="sos-response-workspace__identity"><ShieldCheck aria-hidden="true"/><div><strong>{responseMapZone(senior).name}</strong><p>{senior?.safeZone?.radius ? `${senior.safeZone.radius} m assigned geofence` : senior ? 'Default barangay boundary' : 'Senior record unavailable'}</p></div></div><button type="button" className="sos-response-workspace__details" onClick={() => onDetails(incident)}><History aria-hidden="true"/>View incident details</button>{isPendingSos(incident) && <button type="button" data-confirm-alert className="sos-response-workspace__confirm" disabled={busy} onClick={() => onConfirm(incident)}>{busy ? 'Saving response…' : 'Confirm response & open map'}</button>}</>}
       </aside>
-      <div className="sos-response-map"><div role="group" aria-label="Response map style" className="sos-response-map__styles"><button type="button" aria-pressed={variant === 'standard'} onClick={() => setVariant('standard')}><Layers aria-hidden="true"/>Default</button><button type="button" aria-pressed={variant === 'satellite'} onClick={() => setVariant('satellite')}><Satellite aria-hidden="true"/>Satellite</button></div>{incident ? <IncidentMap key={incident.device_id} client={client} incident={incident} senior={senior} now={now} variant={variant}/> : <div className="sos-response-map__empty"><MapPin aria-hidden="true"/><h2>Select an SOS incident</h2><p>Its saved location, latest watch location and assigned geofence will appear here.</p></div>}</div>
+      <div className="sos-response-map">{incident ? <IncidentMap key={incident.device_id} client={client} incident={incident} senior={senior} now={now} variant={variant} onVariantChange={setVariant}/> : <div className="sos-response-map__empty"><MapPin aria-hidden="true"/><h2>Select an SOS incident</h2><p>Its saved location, latest watch location and assigned geofence will appear here.</p></div>}</div>
     </div>
   </section>;
 }

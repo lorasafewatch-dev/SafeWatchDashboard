@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { alertTitle, batteryAlertMessage } from '../../../shared/alertLifecycle.js';
 import { SosResponseIndicator } from '../../../shared/components/SosResponseStatus.jsx';
 import { sosResponseState } from '../../../shared/sosResponse.js';
-import { Battery, Bell, ChevronRight, MapPin, Maximize2, Search, ShieldCheck, Users, Watch } from 'lucide-react';
+import { Battery, Bell, ChevronRight, MapPin, Search, ShieldCheck, Users, Watch } from 'lucide-react';
 import { monitoringSummary, readingStatus, readingText, watchUpdate } from '../adminPresentation.js';
 import StatCard from './StatCard.jsx';
 import SeniorPhoto from '../../../shared/components/SeniorPhoto.jsx';
@@ -33,7 +33,7 @@ export function AdminOverview({ seniors, alerts, now, children, onNavigate, onDe
     </div>
     <div className="admin-overview__middle">
       <section className="card admin-overview__map" aria-label="Location overview">
-        <div className="admin-panel-heading"><h2>Live location <span className="admin-dot" /></h2><button onClick={() => onNavigate('Live Location')} className="admin-text-action"><Maximize2 />Expand map</button></div>
+        <div className="admin-panel-heading"><h2>Live location <span className="admin-dot" /></h2><button type="button" onClick={() => onNavigate('Live Location')} className="admin-text-action">Open live location<ChevronRight aria-hidden="true" /></button></div>
         <div className="admin-overview__map-canvas">{children}</div>
       </section>
       <section className="card admin-overview__alerts" aria-label="Active alerts overview">
@@ -45,8 +45,11 @@ export function AdminOverview({ seniors, alerts, now, children, onNavigate, onDe
             <div className="admin-incident__body"><div className="admin-incident__title"><h3>{alertTitle(incident)}</h3><time>{incident.time}</time></div>
               <p className="admin-incident__name">{incident.seniorName}</p><p className="admin-incident__description">{incident.rawType === 'SOS' ? 'Watch SOS button pressed' : incident.rawType === 'LOW_BATTERY' ? batteryAlertMessage(incident) : 'Senior left the designated boundary'}</p>
               <SosResponseIndicator incident={incident}/>
-              <div className="admin-incident__actions"><button className="admin-incident__details" onClick={() => onDetails(incident)}>View details</button><button data-confirm-alert disabled={confirming} onClick={() => onConfirm(incident)}>{confirming ? 'Saving…' : 'Confirm response'}</button></div>
-              {incident.alert_type === 'SOS' && onDecline && <button data-confirm-alert disabled={confirming || sosResponseState(incident).responses.barangay?.decision === 'declined'} className="sos-decline-button" onClick={() => onDecline(incident)}>Decline — notify family</button>}
+              <div className="admin-incident__actions">
+                <button type="button" className="admin-action-button" onClick={() => onDetails(incident)}>View details</button>
+                <button type="button" className="admin-action-button admin-action-button--confirm" data-confirm-alert disabled={confirming} onClick={() => onConfirm(incident)}>{confirming ? 'Saving…' : 'Confirm response'}</button>
+                {incident.alert_type === 'SOS' && onDecline && <button type="button" className="admin-action-button admin-action-button--decline" data-confirm-alert disabled={confirming || sosResponseState(incident).responses.barangay?.decision === 'declined'} onClick={() => onDecline(incident)}>Decline — notify family</button>}
+              </div>
             </div>
           </article>)}
         </div>
