@@ -35,3 +35,4 @@
 .watch-notifications__empty > svg { width: 30px; height: 30px; margin: 0 auto 12px; color: #7b9d8a; }
 .watch-notifications__empty h3 { margin: 0 0 6px; font-size: 14px; }
 .watch-notifications__empty p { margin: 0; font-size: 12px; line-height: 1.6; color: #62776b; }
+.watch-notifications__category{font-size:12px;font-weight:700;color:#567265;padding:12px 6px 4px;text-transform:uppercase;letter-spacing:.04em}

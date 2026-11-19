@@ -17,19 +17,20 @@ export function NotificationPanel({ id, notifications, readIds, loading, error, 
     {loading && <p className="watch-notifications__notice" role="status">Checking notifications…</p>}
     {error && <p className="watch-notifications__error" role="alert">{error}</p>}
     {!loading && !error && !notifications.length && <div className="watch-notifications__empty"><Bell aria-hidden="true"/><h3>No notifications yet</h3><p>Watch alerts and SOS responses will appear here.</p></div>}
-    <ul className="watch-notifications__list" aria-label="Watch notifications">{notifications.map(item => <li key={item.key}>
+    <ul className="watch-notifications__list" aria-label="Watch notifications">{notifications.map((item, index) => <li key={item.key}>
+      {(index === 0 || item.category !== notifications[index - 1].category) && <h3 className="watch-notifications__category">{item.category === 'access' ? 'Family access' : 'Safety alerts and SOS responses'}</h3>}
       <button type="button" className={`watch-notifications__item${unread.has(item.key) ? ' is-unread' : ''}`} onClick={() => onOpen(item)}>
         <span className="watch-notifications__item-top"><strong>{item.name}</strong><span>{unread.has(item.key) ? 'Unread' : 'Read'}</span></span>
         <span className="watch-notifications__title">{item.title}</span>
         {item.message !== item.title && <span className="watch-notifications__message">{item.message}</span>}
-        <time dateTime={item.at}>{formatTime(item.at)}</time><span className="watch-notifications__action">{item.active ? 'Review active alert' : 'View SOS response'}</span>
+        <time dateTime={item.at}>{formatTime(item.at)}</time><span className="watch-notifications__action">{item.category === 'access' ? 'View access request' : item.active ? 'Review active alert' : 'View SOS response'}</span>
       </button>
     </li>)}</ul>
     <footer><p>Reading notifications does not confirm an SOS.</p><button type="button" onClick={onViewAll}>View all alerts and responses</button></footer>
   </section>;
 }
 
-export default function NotificationBell({ app = 'family', userId, alerts = [], responses = [], loading = false, blocked = false, error = '', onRefresh, onOpenNotification, onViewAll, className = '' }) {
+export default function NotificationBell({ app = 'family', userId, alerts = [], responses = [], requests = [], loading = false, blocked = false, error = '', onRefresh, onOpenNotification, onViewAll, className = '' }) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState({ top: 72, right: 16 });
   const storageKey = notificationStorageKey(app, userId);
@@ -37,7 +38,7 @@ export default function NotificationBell({ app = 'family', userId, alerts = [], 
   const trigger = useRef(null);
   const panel = useRef(null);
   const id = useId();
-  const notifications = useMemo(() => buildBellNotifications(alerts, responses, userId), [alerts, responses, userId]);
+  const notifications = useMemo(() => buildBellNotifications(alerts, responses, userId, requests, app), [alerts, responses, userId, requests, app]);
   const unreadCount = unreadNotifications(notifications, readIds).length;
   const close = () => setOpen(false);
 

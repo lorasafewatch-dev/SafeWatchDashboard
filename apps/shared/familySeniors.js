@@ -18,6 +18,13 @@ export function chooseFamilySenior(seniors, preferredId) {
   return seniors.some(senior => senior.id === preferredId) ? preferredId : seniors[0]?.id || null;
 }
 
+export function retainLinkedWatchAlerts(memory, seniors) {
+  const ids = new Set(seniors.map(senior => senior.id));
+  const incidents = (memory.incidents || []).filter(incident => ids.has(incident.device_id));
+  const keys = new Set(incidents.map(incident => incident.key));
+  return { incidents, ledger: Object.fromEntries(Object.entries(memory.ledger || {}).filter(([key]) => keys.has(key))) };
+}
+
 export async function loadFamilySeniors(client, userId) {
   if (!userId) return [];
   const { data, error } = await client.from('family_seniors')
@@ -30,7 +37,7 @@ export async function loadFamilySeniors(client, userId) {
 
 export async function loadFamilyRequests(client) {
   const { data, error } = await client.from('safewatch_family_requests')
-    .select('id, device_id, kind, requested_name, status, created_at').order('created_at', { ascending: false }).limit(100);
+    .select('id, device_id, kind, requested_name, status, created_at, reviewed_at').order('created_at', { ascending: false }).limit(100);
   if (error) throw error;
   return data || [];
 }

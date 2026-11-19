@@ -4,7 +4,6 @@ import { dashboardLocationAt, parseGpsPoint } from '../../shared/gpsLocation.js'
 import { MapNavigation, SafeWatchTiles } from '../../shared/components/SafeWatchMap.jsx';
 import { ALERT_QUERY_FILTER, acknowledgeIncident, alertTitle, batteryAlertMessage, confirmationErrorMessage, groupAlertIncidents, needsBarangayAttention } from '../../shared/alertLifecycle.js';
 import LocationHistory from '../../shared/components/LocationHistory.jsx';
-import ActivityHistory from '../../shared/components/ActivityHistory.jsx';
 import NotificationBell from '../../shared/components/NotificationBell.jsx';
 import SosResponseUpdates, { SosResponseIndicator } from '../../shared/components/SosResponseStatus.jsx';
 import { loadSosResponses, mergeSosResponse, respondToSos, sosResponseError, sosResponseState } from '../../shared/sosResponse.js';
@@ -15,7 +14,6 @@ import { familyZoneContains } from '../../shared/familySafeZone.js';
 import { MapContainer, Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { SENIOR_AVATAR } from '../../shared/avatar.js';
 import { createSeniorMarker } from '../../shared/mapMarker.js';
 import {
   Menu,
@@ -61,6 +59,18 @@ import PasswordRecovery from '../../shared/components/PasswordRecovery.jsx';
 import RecoveryLinkConfirm from '../../shared/components/RecoveryLinkConfirm.jsx';
 import AccountAccessDenied from './components/AdminAccessDenied.jsx';
 import { familyProfileFromUser } from '../../shared/familyProfile.js';
+import FamilyAccessManager from './components/FamilyAccessManager.jsx';
+import SeniorPicker from '../../shared/components/SeniorPicker.jsx';
+import SeniorPhoto from '../../shared/components/SeniorPhoto.jsx';
+import { SeniorPhotoContext } from '../../shared/seniorPhotoContext.js';
+import { dialogKeyboard } from '../../shared/dialogKeyboard.js';
+import DailyAverages from '../../shared/components/DailyAverages.jsx';
+import ActivityHistory from '../../shared/components/ActivityHistory.jsx';
+import SosLocation from '../../shared/components/SosLocation.jsx';
+import useFamilyRequestNotifications from '../../shared/components/useFamilyRequestNotifications.js';
+import SeniorPhotoEditor, { PhotoUploadField } from './components/SeniorPhotoEditor.jsx';
+import { saveSeniorPhoto, prepareSeniorPhoto } from '../../shared/seniorPhotos.js';
+import { normalizeWatchId } from '../../shared/familySeniors.js';
 
 // Map Controller
 const MapController = ({ center, zoom, trigger, bounds }) => {
@@ -157,6 +167,14 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [mapSearch, setMapSearch] = useState('');
   const [zoneSearch, setZoneSearch] = useState('');
   const [historyDeviceId, setHistoryDeviceId] = useState('');
+  const [healthDeviceId, setHealthDeviceId] = useState('');
+  const [accessRequestId, setAccessRequestId] = useState(null);
+  const [editingPhoto, setEditingPhoto] = useState(null);
+  const [registerPhoto, setRegisterPhoto] = useState(null);
+  const [registerBusy, setRegisterBusy] = useState(false);
+  const [registerError, setRegisterError] = useState('');
+  const registrationLocked = React.useRef(false);
+  const accessNotifications = useFamilyRequestNotifications(supabase, isLoggedIn ? userId : null, 'barangay');
   const [dismissedAlerts] = useState(new Set());
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -369,6 +387,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
           return {
             id: device.id,
+            photo_path: device.photo_path,
             name: device.patient_name,
             phone: device.id,
             age: device.age ?? (device.device_name?.split(' (')[2]?.replace(')', '').replace(' [MUTED]', '').trim() || '--'),
@@ -478,7 +497,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         }
       }
       if (!mapped.length) { pendingAlertTone.current = null; stopAlertSounds(); }
-      setSelectedAlert(current => current ? mapped.find(item => item.key === current.key) || null : null);
+      setSelectedAlert(current => {
+        if (!current) return null;
+        const fresh = mapped.find(item => String(item.id) === String(current.id));
+        return fresh ? { ...fresh, historyView: current.historyView } : current.historyView ? current : null;
+      });
       setSosAlerts(mapped);
       setNotificationsError('');
     } catch (error) {
@@ -488,10 +511,9 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   };
 
   const commitConfirmation = incident => {
-    confirmedKeys.current.add(incident.key);
-    activeAlertKeys.current.delete(incident.key);
-    setSosAlerts(items => items.filter(item => item.key !== incident.key));
-    setSelectedAlert(current => current?.key === incident.key ? null : current);
+    if (incident.key) { confirmedKeys.current.add(incident.key); activeAlertKeys.current.delete(incident.key); }
+    setSosAlerts(items => items.filter(item => String(item.id) !== String(incident.id)));
+    setSelectedAlert(current => String(current?.id) === String(incident.id) ? null : current);
   };
 
   const handleDismissAlertDB = async (incident) => {
@@ -615,33 +637,23 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   }, [isLoggedIn, userId]);
 
   const handleRegisterSenior = async () => {
-    if (!registerName || !registerDeviceId) {
-      alert("Please fill in both the Patient Name and the Watch ID.");
-      return;
-    }
-
+    if (registrationLocked.current) return;
+    registrationLocked.current = true; setRegisterBusy(true); setRegisterError('');
     try {
-      const { error } = await supabase
-        .from('devices')
-        .upsert([
-          {
-            id: registerDeviceId.trim(),
-            patient_name: registerName,
-            device_name: `SafeWatch Watch (${registerGender})`
-          }
-        ]);
-
-      if (error) {
-        alert("Registration failed: " + error.message);
-      } else {
-        setIsAddingSenior(false);
-        setRegisterName('');
-        setRegisterDeviceId('');
-        fetchSeniors();
+      const id = normalizeWatchId(registerDeviceId);
+      const name = registerName.trim();
+      if (!name || name.length > 100 || name === '[HIDDEN]') throw new Error('Enter a senior name up to 100 characters.');
+      if (!Number.isInteger(registerAge) || registerAge < 0 || registerAge > 130) throw new Error('Enter an age from 0 to 130.');
+      if (registerPhoto) await prepareSeniorPhoto(registerPhoto);
+      const { error } = await supabase.from('devices').insert({ id, patient_name: name, age: registerAge, gender: registerGender, device_name: `SafeWatch Watch (${registerGender})` });
+      if (error) throw error;
+      if (registerPhoto) {
+        try { await saveSeniorPhoto(supabase, id, registerPhoto); }
+        catch (failure) { setSeniorMessage(`Senior registered. The optional photo was not saved: ${failure.message} Use Edit photo to retry.`); }
       }
-    } catch (e) {
-      alert("Error: " + e.message);
-    }
+      setIsAddingSenior(false); setRegisterName(''); setRegisterDeviceId(''); setRegisterPhoto(null); await fetchSeniors();
+    } catch (error) { setRegisterError(error.code === '23505' ? 'This watch is already registered. Use Edit photo on its existing record.' : error.message); }
+    finally { registrationLocked.current = false; setRegisterBusy(false); }
   };
 
   const sanIsidroEastGeofence = SAN_ISIDRO_EAST_BOUNDARY;
@@ -658,6 +670,14 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   if (!isLoggedIn) return <AuthEntry client={supabase} app='dashboard' initialError={authLinkError} notice={authNotice} onRecovered={retryAuth} />;
 
+  const openAlertDetails = incident => setSelectedAlert({ ...incident,
+    historyView: !sosAlerts.some(row => String(row.id) === String(incident.id)),
+    seniorName: incident.seniorName || incident.devices?.patient_name || 'Senior',
+    deviceId: incident.device_id, rawType: incident.alert_type, rawDetails: incident.details || {},
+    fullTime: new Date(incident.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }),
+  });
+  const selectedAlertPending = selectedAlert && selectedAlert.details?.incident_open !== false && ['PENDING_FAMILY', 'ESCALATED_BHW'].includes(selectedAlert.details?.status || 'PENDING_FAMILY');
+
   const renderContent = () => {
     const visibleAlerts = sosAlerts.filter(a => !dismissedAlerts.has(a.id));
     const totalSeniors = seniors.length.toString();
@@ -671,12 +691,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     const healthStatusColor = allVitalsNormal ? 'text-emerald-700' : 'text-slate-700';
     const healthStatusBg = allVitalsNormal ? 'bg-emerald-50' : 'bg-slate-100';
     const healthStatusText = summary.healthDetail;
-    const avgPulse = summary.pulse ?? '—';
-    const avgSpo2 = summary.spo2 === null ? '—' : summary.spo2 + '%';
 
     if (activeTab === 'Dashboard') {
       return <AdminOverview seniors={seniors} alerts={visibleAlerts} now={liveTime.getTime()}
-        onNavigate={navigate} onDetails={setSelectedAlert} onConfirm={handleDismissAlertDB} onDecline={incident => handleSosResponse(incident, 'declined')} confirming={confirmingAlerts}
+        onNavigate={navigate} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} onDecline={incident => handleSosResponse(incident, 'declined')} confirming={confirmingAlerts}
         onLocate={senior => { setSelectedSeniorLoc([senior.lat, senior.lng]); navigate('Live Location'); }}>
         <MapContainer bounds={sanIsidroEastGeofence} boundsOptions={{ padding: [24, 24] }} className="h-full w-full" zoomControl={false}>
           <SafeWatchTiles /><MapNavigation bounds={sanIsidroEastGeofence} />
@@ -689,16 +707,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         </MapContainer>
         <div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Trusted hub</span></div>
       </AdminOverview>;
-    } else if (activeTab === 'Activity & Alert History') {
-      return <div className="admin-page"><ActivityHistory key={userId} client={supabase} seniors={seniors}/></div>;
     } else if (activeTab === 'Location History') {
       const selected = seniors.find(senior => senior.id === historyDeviceId) || seniors[0];
       return <div className="admin-page">
-        <div className="bg-white rounded-2xl p-5 mb-5"><label className="font-bold text-sm">Senior for location history
-          <select aria-label="Senior for location history" className="ml-3 rounded-xl border border-slate-200 px-4 py-2" value={selected?.id || ''} onChange={event => setHistoryDeviceId(event.target.value)}>
-            {!seniors.length && <option value="">No seniors available</option>}
-            {seniors.map(senior => <option key={senior.id} value={senior.id}>{senior.name}</option>)}
-          </select></label></div>
+        <div className="bg-white rounded-2xl p-5 mb-5"><SeniorPicker label="Senior for location history" seniors={seniors} value={selected?.id || ''} onChange={setHistoryDeviceId}/></div>
         {selected ? <LocationHistory key={`${userId}:${selected.id}`} client={supabase} deviceId={selected.id} name={selected.name}/> : <p>No seniors available to review.</p>}
       </div>;
     } else if (activeTab === 'Senior Monitoring') {
@@ -766,7 +778,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <tr key={senior.id} className="hover:bg-[#f7f9f4]/50 transition-colors">
                       <td className="table-cell text-sm">
                         <div className="flex items-center gap-3">
-                          <img src={SENIOR_AVATAR} className="w-9 h-9 rounded-full bg-[#f7f9f4]" alt={senior.name} />
+                          <SeniorPhoto senior={senior} className="w-9 h-9 rounded-full bg-[#f7f9f4]" />
                           <div>
                             <p className="font-semibold text-gray-800">{senior.name}</p>
                             <p className="text-[10px] text-gray-400">ID: {senior.phone}</p>
@@ -812,6 +824,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                           <Eye className="w-4 h-4" />
                           <span className="text-[10px]">View</span>
                         </button>
+                        <button type="button" onClick={() => setEditingPhoto(senior)} className="rounded-lg px-3 py-2 bg-emerald-50 text-emerald-700 font-bold">Edit photo</button>
                         <button type="button" onClick={() => { setDeletingSenior(senior); setSeniorMessage(''); }} aria-label={`Delete senior ${senior.name}`} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 rounded-lg font-bold hover:bg-red-100 transition-all">
                           <Trash2 className="w-4 h-4" aria-hidden="true"/><span className="text-xs">Delete senior</span>
                         </button>
@@ -847,7 +860,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   className="w-full text-left bg-white/80 backdrop-blur-xl p-4 rounded-2xl shadow-sm border border-white cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all group disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 >
                   <div className="flex items-center gap-3 mb-3">
-                    <img src={SENIOR_AVATAR} className="w-10 h-10 rounded-full bg-slate-100" />
+                    <SeniorPhoto senior={senior} className="w-10 h-10 rounded-full bg-slate-100" />
                     <div>
                       <p className="font-bold text-slate-800 text-sm group-hover:text-[#4a7c59] transition-colors">{senior.name}</p>
                       <p className="text-[10px] text-slate-400 font-semibold uppercase">{senior.status}</p>
@@ -883,7 +896,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <Popup className="premium-popup">
                     <div className="text-slate-800 p-2 min-w-[150px]">
                       <div className="flex items-center gap-3 mb-2">
-                        <img src={SENIOR_AVATAR} className="w-8 h-8 rounded-full" />
+                        <SeniorPhoto senior={senior} className="w-8 h-8 rounded-full" />
                         <div>
                           <p className="font-bold leading-tight">{senior.name}</p>
                           <p className="text-[10px] font-bold text-[#4a7c59] uppercase">{senior.status}</p>
@@ -904,17 +917,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     } else if (activeTab === 'Health Overview') {
       return (
         <div className="admin-page admin-health">
-          {/* Health Summary Row */}
-          <div className="grid grid-cols-4 gap-6">
-            <StatCard icon={HeartPulse} value={avgPulse} label="Avg. Pulse Rate" subtext="Current available readings" color="text-purple-600" iconBg="bg-purple-100" signal={summary.pulse === null ? 0 : summary.pulse >= 60 && summary.pulse <= 100 ? 100 : 50} />
-            <StatCard icon={Activity} value={avgSpo2} label="Avg. Blood Oxygen" subtext="Current available readings" color="text-emerald-600" iconBg="bg-emerald-100" signal={summary.spo2 === null ? 0 : summary.spo2 >= 95 ? 100 : summary.spo2 >= 90 ? 70 : 30} />
-            <StatCard icon={Bell} value={activeAlertsCount} label="Critical Alerts" subtext="Active now" color="text-red-600" iconBg="bg-red-100" signal={activeAlertsCount === "00" ? 100 : Math.max(0, 100 - (parseInt(activeAlertsCount) * 20))} />
-            <StatCard icon={Shield} value={summary.online + "/" + seniors.length} label="Watches reporting" subtext="Packet received in the last 45s" color="text-blue-600" iconBg="bg-blue-100" signal={seniors.length ? summary.online / seniors.length * 100 : 0} />
-          </div>
+          <DailyAverages key={userId} client={supabase} seniors={seniors} deviceId={(seniors.find(senior => senior.id === healthDeviceId) || seniors[0])?.id} onSelect={setHealthDeviceId}/>
 
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-6 border-b border-slate-50">
-              <h3 className="font-bold text-slate-800">Real-time Health Vitals</h3>
+              <h3 className="font-bold text-slate-800">Latest watch readings</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -932,7 +939,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <tr key={senior.id} className="hover:bg-slate-50/30 transition-colors">
                       <td className="table-cell">
                         <div className="flex items-center gap-3">
-                          <img src={SENIOR_AVATAR} className="w-10 h-10 rounded-full" />
+                          <SeniorPhoto senior={senior} className="w-10 h-10 rounded-full" />
                           <span className="font-bold text-slate-800">{senior.name}</span>
                         </div>
                       </td>
@@ -1010,7 +1017,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <tr key={alert.id} className="hover:bg-slate-50/30 transition-colors">
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-4">
-                          <img src={SENIOR_AVATAR} className="w-14 h-14 rounded-full bg-slate-100" />
+                          <SeniorPhoto deviceId={alert.device_id} className="w-14 h-14 rounded-full bg-slate-100" />
                           <div>
                             <p className="font-bold text-slate-800 text-base">{alert.seniorName}</p>
                             <p className="text-xs text-slate-400 font-bold tracking-wider">ID: {alert.seniorId}</p>
@@ -1033,6 +1040,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                         </div>
                       </td>
                       <td className="px-8 py-6 text-right">
+                        <button type="button" onClick={() => openAlertDetails(alert)} className="px-4 py-2 text-emerald-700 text-sm font-bold underline">View details</button>
                         <button data-confirm-alert disabled={confirmingAlerts} onClick={() => handleDismissAlertDB(alert)} className="px-4 py-2 bg-slate-800 text-white text-[10px] font-black uppercase rounded-lg hover:bg-slate-900 transition-all disabled:opacity-50">Confirm response</button>
                         {alert.alert_type === 'SOS' && <button data-confirm-alert disabled={confirmingAlerts || sosResponseState(alert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(alert, 'declined')} className="sos-decline-button block">Decline — notify family</button>}
                       </td>
@@ -1210,7 +1218,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           </div>
         </div>
       );
-    } else if (activeTab === 'Settings') {
+    } else if (activeTab === 'Family Access') {
+      return <FamilyAccessManager key={userId} client={supabase} requestId={accessRequestId} onChanged={accessNotifications.refresh}/>;
+    } else if (activeTab === 'Activity & Alert History') {
+      return <ActivityHistory key={userId} client={supabase} seniors={seniors} onDetails={openAlertDetails}/>;
+    } else if (activeTab === 'Barangay Profile') {
       return <AccountSettings key={userId} client={supabase} user={accountUser} permission={accountPermission} onUpdated={retryAuth} verifyCurrentPassword={verifyCurrentPassword} />;
     } else if (activeTab === 'Help & Support') {
       return <HelpSupport/>;
@@ -1218,7 +1230,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   };
 
   return (
-    <div className="admin-nature">
+    <SeniorPhotoContext.Provider value={{ client: supabase, seniors }}><div className="admin-nature">
       <div className="admin-background" aria-hidden="true" />
       {sidebarOpen && <button className="admin-sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
       <aside id="admin-sidebar" className={'admin-sidebar' + (sidebarOpen ? ' admin-sidebar--open' : '')} aria-label="Workspace navigation">
@@ -1233,20 +1245,20 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           <SidebarItem icon={Map} label="Geofence Zones" onClick={() => navigate('Geofence Zones')} active={activeTab === 'Geofence Zones'} />
           <SidebarItem icon={Bell} label="Alerts" onClick={() => navigate('SOS Alerts')} active={activeTab === 'SOS Alerts'} badge={sosAlerts.length || null} />
           <SidebarItem icon={Activity} label="Activity & Alert History" onClick={() => navigate('Activity & Alert History')} active={activeTab === 'Activity & Alert History'} />
-          <SidebarItem icon={Settings} label="Settings" onClick={() => navigate('Settings')} active={activeTab === 'Settings'} />
+          <SidebarItem icon={Users} label="Family Access" onClick={() => { setAccessRequestId(null); navigate('Family Access'); }} active={activeTab === 'Family Access'} />
           <SidebarItem icon={HelpCircle} label="Help & Support" onClick={() => navigate('Help & Support')} active={activeTab === 'Help & Support'} />
         </nav>
-        <div className="admin-sidebar__account"><button onClick={() => navigate('Settings')} aria-label="Open account settings"><span className="admin-account-initials">{accountInitials}</span><span><strong>{accountName}</strong><small>{accountPermission?.role === 'super_admin' ? 'Super administrator' : 'Barangay staff'}</small></span></button><button type="button" aria-label="Logout" onClick={handleLogout}><LogOut /></button></div>
+        <div className="admin-sidebar__account"><button onClick={() => navigate('Barangay Profile')} aria-label="Open barangay profile"><span className="admin-account-initials">{accountInitials}</span><span><strong>{accountName}</strong><small>{accountPermission?.role === 'super_admin' ? 'Super administrator' : 'Barangay staff'}</small></span></button><button type="button" aria-label="Logout" onClick={handleLogout}><LogOut /></button></div>
       </aside>
       <main className="admin-main">
         <header className="admin-header">
           <div className="admin-header__heading"><button className="admin-menu-button" aria-label="Open navigation" aria-controls="admin-sidebar" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><Menu /></button><div><p className="admin-breadcrumb">Workspace <span>/</span> {activeTab === 'SOS Alerts' ? 'Alerts' : activeTab}</p><h1>{activeTab === 'Dashboard' ? 'Monitoring overview' : activeTab === 'SOS Alerts' ? 'Alerts & response' : activeTab}</h1><p className="admin-header__subtitle">San Isidro East, Malvar, Batangas</p></div></div>
           <div className="admin-header__tools">
             <div className="admin-date"><Calendar /><div><span>{liveTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })}</span><small>{timeStr}</small></div></div>
-            <NotificationBell key={userId} app="barangay" userId={userId} alerts={sosAlerts} responses={sosResponses} className="admin-icon-button" loading={notificationsLoading} blocked={!!selectedAlert} error={[notificationsError,sosResponsesError].filter(Boolean).join(' ')} onRefresh={fetchAlerts} onViewAll={() => navigate('SOS Alerts')} onOpenNotification={item => { navigate('SOS Alerts'); if (item.active) setSelectedAlert(item.incident); }}/>
+            <NotificationBell key={userId} app="barangay" userId={userId} alerts={sosAlerts} responses={sosResponses} requests={accessNotifications.requests} className="admin-icon-button" loading={notificationsLoading} blocked={!!selectedAlert} error={[notificationsError,sosResponsesError,accessNotifications.error].filter(Boolean).join(' ')} onRefresh={() => { fetchAlerts(); accessNotifications.refresh(); }} onViewAll={() => navigate('SOS Alerts')} onOpenNotification={item => { if (item.category === 'access') { setAccessRequestId(item.request.id); navigate('Family Access'); } else { navigate('SOS Alerts'); openAlertDetails(item.incident); } }}/>
             <div className="admin-account-menu" ref={accountMenuRef}>
               <button type="button" ref={accountButtonRef} aria-label={'Account: ' + accountName} aria-expanded={accountMenuOpen} aria-controls="account-menu" onClick={() => setAccountMenuOpen(open => !open)} className="admin-account-initials">{accountInitials}</button>
-              {accountMenuOpen && <div id="account-menu" role="region" aria-label="Account menu" className="admin-account-dropdown"><div><strong>{accountName}</strong><p>{profile.email}</p></div><button onClick={() => { navigate('Settings'); setAccountMenuOpen(false); }}><Settings />Account settings</button><button onClick={handleLogout}><LogOut />Logout</button></div>}
+              {accountMenuOpen && <div id="account-menu" role="region" aria-label="Account menu" className="admin-account-dropdown"><div><strong>{accountName}</strong><p>{profile.email}</p></div><button onClick={() => { navigate('Barangay Profile'); setAccountMenuOpen(false); }}><Settings />Barangay Profile</button><button onClick={handleLogout}><LogOut />Logout</button></div>}
             </div>
             <button aria-label="Add senior" onClick={() => setIsAddingSenior(true)} className="btn-primary admin-add-senior"><Plus /><span>Add senior</span></button>
           </div>
@@ -1255,11 +1267,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           {alertActionError && <p role="alert" className="bg-red-50 text-red-700 rounded-xl p-4 mb-4">{alertActionError}</p>}
           {seniorMessage && <p role="status" className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{seniorMessage}</p>}
           {renderContent()}
-          {activeTab === 'SOS Alerts' && <SosResponseUpdates responses={sosResponses} error={sosResponsesError} onRetry={fetchSosResponseUpdates}/>}
+          {activeTab === 'SOS Alerts' && <><SosResponseUpdates responses={sosResponses} error={sosResponsesError} onRetry={fetchSosResponseUpdates} onDetails={openAlertDetails}/><ActivityHistory key={userId} client={supabase} seniors={seniors} onDetails={openAlertDetails}/></>}
         </div>
       </main>
 
       {deletingSenior && <DeleteSeniorDialog key={deletingSenior.id} client={supabase} senior={deletingSenior} onCancel={() => setDeletingSenior(null)} onDeleted={handleSeniorDeleted}/>}
+      {editingPhoto && <SeniorPhotoEditor key={editingPhoto.id} client={supabase} senior={editingPhoto} onSaved={fetchSeniors} onClose={() => setEditingPhoto(null)}/>}
       {logoutRequested && <LogoutConfirmation client={supabase} app="dashboard" onCancel={() => setLogoutRequested(false)} onLoggedOut={() => { setLogoutRequested(false); setAccountMenuOpen(false); setActiveTab('Dashboard'); }}/>}
 
       {/* Register Senior Modal */}
@@ -1321,12 +1334,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   <option value="Female">Female</option>
                 </select>
               </div>
+              <div className="col-span-2"><PhotoUploadField file={registerPhoto} onChange={setRegisterPhoto} disabled={registerBusy}/></div>
+              {registerError && <p role="alert" className="col-span-2 text-red-700">{registerError}</p>}
               <div className="col-span-2 space-y-4 pt-4">
                 <button
+                  disabled={registerBusy}
                   onClick={handleRegisterSenior}
                   className="w-full py-5 bg-[#4a7c59] text-white font-bold rounded-2xl shadow-lg hover:bg-[#3d6a4a] transition-all text-sm"
                 >
-                  Confirm Registration
+                  {registerBusy ? 'Saving…' : 'Confirm Registration'}
                 </button>
               </div>
             </div>
@@ -1406,8 +1422,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
       {/* Alert Details Modal */}
       {selectedAlert && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div role="dialog" aria-modal="true" aria-label="Alert details" className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200" onKeyDown={event => dialogKeyboard(event, () => setSelectedAlert(null))}>
+          <div role="dialog" aria-modal="true" aria-label="Alert details" className="bg-white rounded-3xl w-full max-w-md max-h-[90dvh] overflow-y-auto shadow-2xl border border-slate-100">
             {/* Header */}
             <div className={`p-6 text-white ${
               selectedAlert.rawType === 'SOS' ? 'bg-red-500' : 'bg-orange-500'
@@ -1433,7 +1449,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Senior Details</p>
                 <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl">
-                  <img src={SENIOR_AVATAR} className="w-12 h-12 rounded-full bg-white shadow-sm border border-slate-200" alt={selectedAlert.seniorName} />
+                  <SeniorPhoto deviceId={selectedAlert.device_id} className="w-12 h-12 rounded-full bg-white shadow-sm border border-slate-200" />
                   <div>
                     <p className="font-bold text-slate-800 text-lg">{selectedAlert.seniorName}</p>
                     <p className="text-xs font-medium text-slate-500">Watch ID: {selectedAlert.deviceId}</p>
@@ -1445,7 +1461,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Alert Description</p>
                 <p className="text-sm font-medium text-slate-700 bg-slate-50 p-4 rounded-2xl">
                   {selectedAlert.rawType === 'SOS'
-                    ? `An SOS alert was triggered manually by ${selectedAlert.seniorName} from their SafeWatch device. Immediate assistance may be required.`
+                    ? selectedAlert.details?.source === 'family_app' ? `Family requested assistance for ${selectedAlert.seniorName}.` : `${selectedAlert.seniorName}'s watch sent an SOS. Immediate assistance may be required.`
                     : selectedAlert.rawType === 'LOW_BATTERY' ? batteryAlertMessage(selectedAlert)
                     : `${selectedAlert.seniorName} has moved outside the ${selectedAlert.rawDetails?.zone_name || 'San Isidro East'} safe zone.`
                   }
@@ -1454,12 +1470,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
               <div className="flex gap-3 pt-2">
                 <button
-                  onClick={() => setSelectedAlert(null)}
+                  autoFocus onClick={() => setSelectedAlert(null)}
                   className="flex-1 py-3.5 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-colors text-sm"
                 >
                   Close
                 </button>
-                <button
+                {selectedAlertPending && <button
                   data-confirm-alert disabled={confirmingAlerts}
                   onClick={() => handleDismissAlertDB(selectedAlert)}
                   className={`flex-1 py-3.5 text-white font-bold rounded-2xl transition-colors shadow-lg text-sm ${
@@ -1467,15 +1483,16 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                   }`}
                 >
                   Confirm response
-                </button>
+                </button>}
               </div>
+              <SosLocation incident={selectedAlert}/>
               <SosResponseIndicator incident={selectedAlert}/>
-              {selectedAlert.alert_type === 'SOS' && <button data-confirm-alert disabled={confirmingAlerts || sosResponseState(selectedAlert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(selectedAlert, 'declined')} className="sos-decline-button w-full">Decline — notify family</button>}
+              {selectedAlertPending && selectedAlert.alert_type === 'SOS' && <button data-confirm-alert disabled={confirmingAlerts || sosResponseState(selectedAlert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(selectedAlert, 'declined')} className="sos-decline-button w-full">Decline — notify family</button>}
             </div>
           </div>
         </div>
       )}
-    </div>
+    </div></SeniorPhotoContext.Provider>
   );
 }
 

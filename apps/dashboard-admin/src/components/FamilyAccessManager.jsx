@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { listFamilyLinksForStaff, listFamilyRequestsForStaff, revokeFamilyAccess, reviewFamilyRequest, seniorManagementError } from '../../../shared/familySeniors.js';
 
-export default function FamilyAccessManager({ client }) {
+export default function FamilyAccessManager({ client, requestId, onChanged }) {
   const [requests, setRequests] = useState([]);
   const [links, setLinks] = useState([]);
   const [revokeChoice, setRevokeChoice] = useState(null);
@@ -12,6 +12,12 @@ export default function FamilyAccessManager({ client }) {
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const mounted = useRef(false);
+  const focusedRequest = useRef(null);
+  useEffect(() => {
+    if (!requestId || loading || focusedRequest.current === requestId) return;
+    const row = document.getElementById(`family-request-${requestId}`);
+    if (row) { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.focus({ preventScroll: true }); focusedRequest.current = requestId; }
+  }, [requestId, requests, loading]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     let active = true;
@@ -27,6 +33,7 @@ export default function FamilyAccessManager({ client }) {
     locked.current = true; setBusy(true); setError('');
     try {
       await reviewFamilyRequest(client, choice.request.id, choice.decision);
+      onChanged?.();
       if (mounted.current) { setChoice(null); setRevision(value => value + 1); }
     } catch (error) { if (mounted.current) setError(seniorManagementError(error)); }
     finally { locked.current = false; if (mounted.current) setBusy(false); }
@@ -40,7 +47,7 @@ export default function FamilyAccessManager({ client }) {
   };
   return <section className="bg-white rounded-3xl border border-slate-100 p-6 md:p-8 space-y-5" aria-labelledby="family-access-title">
     <div className="flex flex-wrap justify-between gap-3"><div>
-      <h3 id="family-access-title" className="text-xl font-bold text-slate-800">Family watch access</h3>
+      <h3 id="family-access-title" className="text-xl font-bold text-slate-800">Pending family access requests</h3>
       <p className="mt-2 text-sm text-slate-500">Verify the physical Watch ID and the applicant’s relationship to the senior. A family may have multiple approved seniors.</p>
     </div><button disabled={busy} onClick={() => setRevision(value => value + 1)} className="text-sm font-bold text-emerald-700 underline">Refresh requests</button></div>
     {error && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
@@ -54,14 +61,14 @@ export default function FamilyAccessManager({ client }) {
       <div className="flex gap-3"><button disabled={busy} onClick={revoke} className="rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white">Confirm revocation</button><button disabled={busy} onClick={() => setRevokeChoice(null)} className="text-sm font-bold text-slate-600">Cancel revocation</button></div>
     </div>}
     {loading ? <p role="status" className="text-sm text-slate-500">Loading family requests…</p> : <div className="space-y-3">
-      {requests.filter(request => request.status === 'pending').map(request => <article key={request.id} className="rounded-2xl border border-slate-100 p-5 space-y-3">
+      {requests.filter(request => request.status === 'pending' || String(request.id) === String(requestId)).map(request => <article key={request.id} id={`family-request-${request.id}`} tabIndex={-1} className={`rounded-2xl border border-slate-100 p-5 space-y-3${String(request.id) === String(requestId) ? ' family-request-highlight' : ''}`}>
         <div><h4 className="font-bold text-slate-800">{request.registered_name || request.requested_name || 'Watch registration required'}</h4>
           <p className="mt-1 text-sm text-slate-600">{request.applicant_name} · {request.applicant_email}</p>
           <p className="mt-2 text-xs text-slate-500 break-all">Watch ID: {request.device_id}</p>
           {request.kind === 'register' && <p className="mt-2 text-xs text-slate-500">Submitted name: {request.requested_name} · Age {request.requested_age ?? 'not provided'} · {request.requested_gender}</p>}
           {request.registered_name && request.kind === 'register' && <p className="mt-2 text-xs text-amber-700">This watch is already registered. Approval links the existing senior and preserves their details.</p>}
         </div>
-        <div className="flex gap-3"><button disabled={busy} onClick={() => { setRevokeChoice(null); setChoice({ request, decision: 'approve' }); }} className="rounded-xl bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">Approve access</button><button disabled={busy} onClick={() => { setRevokeChoice(null); setChoice({ request, decision: 'reject' }); }} className="rounded-xl bg-red-50 px-4 py-2 text-sm font-bold text-red-700">Reject request</button></div>
+        {request.status === 'pending' ? <div className="flex gap-3"><button disabled={busy} onClick={() => { setRevokeChoice(null); setChoice({ request, decision: 'approve' }); }} className="rounded-xl bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">Approve access</button><button disabled={busy} onClick={() => { setRevokeChoice(null); setChoice({ request, decision: 'reject' }); }} className="rounded-xl bg-red-50 px-4 py-2 text-sm font-bold text-red-700">Reject request</button></div> : <p role="status">Request {request.status}</p>}
       </article>)}
       {!requests.some(request => request.status === 'pending') && <p className="text-sm text-slate-500">No pending family access requests.</p>}
     </div>}

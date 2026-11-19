@@ -18,7 +18,7 @@ export function SosResponseIndicator({ incident }) {
   </div>;
 }
 
-export default function SosResponseUpdates({ responses = [], error = '', onRetry }) {
+export default function SosResponseUpdates({ responses = [], error = '', onRetry, onDetails }) {
   return <section className="sos-response-updates" aria-label="Shared SOS response updates">
     <h2>SOS response updates</h2><p>Family and barangay secretary decisions are visible to both sides.</p>
     {error && <p role="alert">{error} {onRetry && <button type="button" onClick={onRetry}>Retry updates</button>}</p>}
@@ -27,6 +27,7 @@ export default function SosResponseUpdates({ responses = [], error = '', onRetry
       <h3>{incident.devices?.patient_name || 'Linked senior'}</h3>
       <p className="sos-response-updates__incident">SOS · {formatTime(incident.created_at)} PHT · #{incident.id}</p>
       <SosResponseIndicator incident={incident}/>
+      {onDetails && <button type="button" onClick={() => onDetails(incident)}>View details</button>}
     </article>)}</div>
   </section>;
 }

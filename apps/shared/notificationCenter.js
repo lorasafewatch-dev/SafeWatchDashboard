@@ -6,7 +6,7 @@ const version = row => Number(row.details?.sos_response_version) || 0;
 const entity = row => `${row.device_id}:${row.alert_type}:${row.id}`;
 const time = value => Date.parse(value) || 0;
 
-export function buildBellNotifications(active = [], responses = [], userId = null) {
+export function buildBellNotifications(active = [], responses = [], userId = null, requests = [], app = 'family') {
   const rows = new Map(active.map(incident => [entity(incident), { incident, active: true }]));
   for (const receipt of responses) {
     const key = entity(receipt);
@@ -16,7 +16,7 @@ export function buildBellNotifications(active = [], responses = [], userId = nul
       rows.set(key, { incident: receipt, active: false });
     }
   }
-  return [...rows.values()].map(({ incident, active: needsResponse }) => {
+  const safety = [...rows.values()].map(({ incident, active: needsResponse }) => {
     const details = incident.details || {};
     const response = sosResponseState(incident);
     const isSos = incident.alert_type === 'SOS';
@@ -41,6 +41,15 @@ export function buildBellNotifications(active = [], responses = [], userId = nul
   }).sort((a,b) => Number(b.active)-Number(a.active)
     || Number(b.active && b.incident.alert_type === 'SOS')-Number(a.active && a.incident.alert_type === 'SOS')
     || time(b.at)-time(a.at));
+  const access = [...new Map(requests.map(request => [String(request.id), request])).values()]
+    .filter(request => app === 'barangay' ? request.status === 'pending' : ['approved', 'rejected'].includes(request.status))
+    .map(request => ({ key: `family-request:${request.id}:${app === 'barangay' ? 'submitted' : request.status}`, category: 'access', request,
+      active: false, title: app === 'barangay' ? 'New family access request' : `Family access request ${request.status}`,
+      name: request.applicant_name || request.registered_name || request.requested_name || 'Family access',
+      message: app === 'barangay' ? 'Review this request in Family Access.' : request.status === 'approved' ? 'Barangay staff approved your watch access.' : 'Barangay staff rejected your watch access request.',
+      at: app === 'barangay' ? request.created_at : request.reviewed_at || request.created_at,
+    })).sort((a, b) => time(b.at) - time(a.at));
+  return [...safety, ...access];
 }
 
 export function notificationStorageKey(app, userId) {

@@ -68,6 +68,7 @@ export function groupAlertIncidents(rows = [], previous = []) {
       key: `${groupKey}:${started}${first.alert_type === 'SOS' && last.details?.sos_response_version ? `:response:${last.details.sos_response_version}` : ''}`, memberIds: members.map(row => row.id),
       devices: last.devices || first.devices,
       details: { ...first.details, ...last.details, first_seen_at: started,
+        ...(first.alert_type === 'SOS' ? { sos_location: first.details?.sos_location } : {}),
         last_seen_at: last.details?.last_seen_at || last.created_at },
       updateCount: Math.max(members.length, Number(last.details?.update_count) || 1) });
   }

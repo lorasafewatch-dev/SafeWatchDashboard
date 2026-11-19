@@ -4,7 +4,6 @@ import { familyProfileFromUser, saveFamilyProfile } from '../../../shared/family
 import { accountSecurityError, changeAccountPassword, sendPasswordSecurityCode, verifiedFactors } from '../../../shared/accountSecurity.js';
 import {accountRoleLabel} from '../../../shared/accountAccess.js';
 import AccountAccessManager from './AccountAccessManager.jsx';
-import FamilyAccessManager from './FamilyAccessManager.jsx';
 import AccountAuthenticator from '../../../shared/components/AccountAuthenticator.jsx';
 
 const inputClass = 'mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 focus:outline-2 focus:outline-emerald-500 disabled:opacity-50';
@@ -98,7 +97,6 @@ export default function AccountSettings({ client, user: accountUser, permission,
       </form> : <button disabled={!!busy} onClick={() => { setPasswordOpen(true); setSecurityError(''); setSecurityMessage(''); }} className={`${secondaryClass} w-full border-emerald-500 text-emerald-700`}>Change Password</button>}
       {busy && <p role="status" className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> Updating your account…</p>}
     </section>
-    <div className="lg:col-span-2"><FamilyAccessManager client={client}/></div>
     {permission?.role==='super_admin'&&<div className="lg:col-span-2"><AccountAccessManager client={client} userId={user.id} onUpdated={onUpdated}/></div>}
   </div>;
 }
