@@ -69,6 +69,7 @@ import ActivityHistory from '../../shared/components/ActivityHistory.jsx';
 import SosLocation from '../../shared/components/SosLocation.jsx';
 import useFamilyRequestNotifications from '../../shared/components/useFamilyRequestNotifications.js';
 import SeniorPhotoEditor, { PhotoUploadField } from './components/SeniorPhotoEditor.jsx';
+import SeniorDetails from './components/SeniorDetails.jsx';
 import { saveSeniorPhoto, prepareSeniorPhoto } from '../../shared/seniorPhotos.js';
 import { normalizeWatchId } from '../../shared/familySeniors.js';
 
@@ -170,6 +171,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [healthDeviceId, setHealthDeviceId] = useState('');
   const [accessRequestId, setAccessRequestId] = useState(null);
   const [editingPhoto, setEditingPhoto] = useState(null);
+  const [viewingSeniorId, setViewingSeniorId] = useState(null);
   const [registerPhoto, setRegisterPhoto] = useState(null);
   const [registerBusy, setRegisterBusy] = useState(false);
   const [registerError, setRegisterError] = useState('');
@@ -264,6 +266,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     sosResponsesBusy.current = false;
     seniorFetchSequence.current += 1;
     setDeletingSenior(null);
+    setViewingSeniorId(null);
     setSeniorMessage('');
     previousIncidents.current = [];
     confirmedKeys.current.clear();
@@ -310,6 +313,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   const [seniorRecords, setSeniors] = useState([]);
   const seniors = seniorRecords.map(senior => dashboardLocationAt(senior, liveTime.getTime()));
+  const viewingSenior = seniors.find(senior => senior.id === viewingSeniorId);
   const [sosAlerts, setSosAlerts] = useState([]);
 
   // Registration Form States
@@ -383,7 +387,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           }
 
           const details = device.device_name ? device.device_name.split(' (') : [];
-          const gender = details[1] ? details[1].replace(')', '').replace(' [MUTED]', '') : 'Male';
+          const gender = device.gender?.trim() || (details[1] ? details[1].replace(')', '').replace(' [MUTED]', '').trim() : '') || 'Gender not provided';
 
           return {
             id: device.id,
@@ -430,6 +434,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     setSosResponses(current => current.filter(item => item.device_id !== id));
     previousIncidents.current = previousIncidents.current.filter(item => item.device_id !== id);
     setSelectedAlert(current => current?.deviceId === id ? null : current);
+    setViewingSeniorId(current => current === id ? null : current);
     setSelectedSeniorLoc(null);
     pendingAlertTone.current = null;
     stopAlertSounds();
@@ -820,7 +825,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                       </td>
                       <td className="table-cell">
                         <div className="flex flex-wrap gap-2">
-                        <button disabled={!senior.hasGpsLock} onClick={() => { setSelectedSeniorLoc([senior.lat, senior.lng]); setActiveTab('Live Location'); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg font-bold hover:bg-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button type="button" aria-label={`View ${senior.name}, Watch ID ${senior.id}`} onClick={() => setViewingSeniorId(senior.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-bold hover:bg-emerald-100 transition-all">
                           <Eye className="w-4 h-4" />
                           <span className="text-[10px]">View</span>
                         </button>
@@ -1272,6 +1277,16 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       </main>
 
       {deletingSenior && <DeleteSeniorDialog key={deletingSenior.id} client={supabase} senior={deletingSenior} onCancel={() => setDeletingSenior(null)} onDeleted={handleSeniorDeleted}/>}
+      {viewingSenior && <SeniorDetails
+        key={`${userId}:${viewingSenior.id}`} senior={viewingSenior} now={liveTime.getTime()}
+        onClose={() => setViewingSeniorId(null)}
+        onMap={() => {
+          if (!isCurrentGpsPoint(viewingSenior, viewingSenior.positionAt)) return;
+          setSelectedSeniorLoc([viewingSenior.lat, viewingSenior.lng]); setViewingSeniorId(null); navigate('Live Location');
+        }}
+        onHistory={() => { setHistoryDeviceId(viewingSenior.id); setViewingSeniorId(null); navigate('Location History'); }}
+        onHealth={() => { setHealthDeviceId(viewingSenior.id); setViewingSeniorId(null); navigate('Health Overview'); }}
+      />}
       {editingPhoto && <SeniorPhotoEditor key={editingPhoto.id} client={supabase} senior={editingPhoto} onSaved={fetchSeniors} onClose={() => setEditingPhoto(null)}/>}
       {logoutRequested && <LogoutConfirmation client={supabase} app="dashboard" onCancel={() => setLogoutRequested(false)} onLoggedOut={() => { setLogoutRequested(false); setAccountMenuOpen(false); setActiveTab('Dashboard'); }}/>}
 

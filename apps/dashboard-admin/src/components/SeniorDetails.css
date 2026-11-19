@@ -1,0 +1,67 @@
+.senior-details { position:fixed; inset:0; z-index:5000; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(15,42,37,.46); backdrop-filter:blur(5px); }
+.senior-details__window { width:100%; max-width:700px; max-height:calc(100dvh - 48px); overflow:auto; background:#fff; border:1px solid #e0ece7; border-radius:26px; box-shadow:0 28px 90px #102c3340; color:#23453c; }
+.senior-details__header { display:flex; align-items:center; gap:14px; padding:24px 28px; border-bottom:1px solid #e7efeb; }
+.senior-details__heading-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:14px; color:#00866a; background:#e7f5ee; }
+.senior-details__header p { margin:0 0 3px; color:#6c837a; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+.senior-details__header h2 { margin:0; font-size:21px; font-weight:750; }
+.senior-details button { cursor:pointer; font:inherit; font-size:13px; font-weight:650; transition:background .15s; }
+.senior-details button:focus-visible { outline:3px solid #45b89b; outline-offset:3px; }
+.senior-details__close { margin-left:auto; display:grid; place-items:center; width:36px; height:36px; flex-shrink:0; border:0; border-radius:50%; color:#617a71; background:#f2f6f4; }
+.senior-details__close:hover { background:#e3eee8; }
+.senior-details__body { padding:26px 28px; display:grid; gap:24px; }
+.senior-details__person { display:flex; align-items:center; gap:20px; min-width:0; }
+.senior-details__avatar { width:82px; height:82px; flex-shrink:0; object-fit:cover; border-radius:24px; border:4px solid #edf7f0; }
+.senior-details__person h3 { margin:0 0 5px; font-size:22px; line-height:1.3; font-weight:750; overflow-wrap:anywhere; }
+.senior-details__person p { margin:0; color:#72847c; font-size:13px; }
+.senior-details__watch { margin-top:10px; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; font-size:11px; color:#788c83; }
+.senior-details__watch code { color:#46695b; font-size:11px; overflow-wrap:anywhere; }
+.senior-details__update { display:flex; align-items:center; gap:10px; padding:12px 14px; background:#f5f7f6; border:1px solid #e7ede9; border-radius:12px; color:#708078; }
+.senior-details__update.is-current { background:#f0f9f3; color:#307a59; border-color:#dceee1; }
+.senior-details__update svg { width:17px; height:17px; flex-shrink:0; }
+.senior-details__update strong,.senior-details__update span { display:block; font-size:12px; }
+.senior-details__update span { margin-top:3px; font-size:11px; font-weight:400; }
+.senior-details__section-title { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px; }
+.senior-details__section-title h3,.senior-details__location h3 { margin:0; font-size:14px; font-weight:700; }
+.senior-details__section-title>span { font-size:10px; color:#74867e; }
+.senior-details__metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.senior-details__metric { padding:16px; border:1px solid #e4ece7; border-radius:16px; background:#fcfdfb; }
+.senior-details__metric>svg { width:20px; height:20px; color:#179478; margin-bottom:12px; }
+.senior-details__metric p { font-size:11px; color:#647d70; margin:0 0 5px; }
+.senior-details__metric>strong { display:block; font-size:23px; line-height:1.4; font-weight:750; color:#193d33; }
+.senior-details__reading { display:block; font-size:10px; margin-top:5px; color:#78867f; }
+.senior-details__reading--good { color:#27825e; }
+.senior-details__reading--warning { color:#aa6d09; }
+.senior-details__location { display:flex; align-items:flex-start; gap:12px; padding:18px; border:1px solid #f0e3c0; border-radius:16px; background:#fffcf3; }
+.senior-details__location>svg { width:21px; height:21px; color:#ad822c; flex-shrink:0; }
+.senior-details__location>div { flex:1; min-width:0; }
+.senior-details__location p { margin:6px 0 0; font-size:12px; color:#7b7868; line-height:1.6; }
+.senior-details__location small { display:block; margin-top:6px; font-size:10px; color:#648276; }
+.senior-details__location button { flex-shrink:0; padding:9px 12px; color:#006e56; background:#fff; border:1px solid #cce3d8; border-radius:9px; }
+.senior-details__location button:hover:enabled { background:#e6f5ed; }
+.senior-details__location button:disabled { color:#8a8b7e; border-color:#e8e6da; background:transparent; cursor:default; }
+.senior-details__location.has-gps { background:#f1faf5; border-color:#d4eadd; }
+.senior-details__location.has-gps>svg { color:#138665; }
+.senior-details__footer { display:flex; justify-content:flex-end; gap:10px; padding:18px 28px; border-top:1px solid #e7efeb; background:#fafcf9; }
+.senior-details__footer button { display:flex; align-items:center; justify-content:center; gap:7px; border:1px solid #d5e5db; padding:11px 16px; border-radius:11px; color:#38705b; background:#fff; }
+.senior-details__footer svg { width:16px; height:16px; }
+.senior-details__footer button:hover { background:#edf7f0; }
+.senior-details__footer .senior-details__primary { color:#fff; background:#00896c; border-color:#00896c; }
+.senior-details__footer .senior-details__primary:hover { background:#00765c; }
+@media(max-width:560px) {
+  .senior-details { padding:12px; }
+  .senior-details__window { max-height:calc(100dvh - 24px); border-radius:20px; }
+  .senior-details__header { padding:18px; gap:10px; }
+  .senior-details__body { padding:20px 18px; gap:20px; }
+  .senior-details__person { gap:12px; }
+  .senior-details__avatar { width:64px; height:64px; border-radius:20px; }
+  .senior-details__person h3 { font-size:19px; }
+  .senior-details__person p { font-size:11px; }
+  .senior-details__metrics { gap:8px; }
+  .senior-details__metric { padding:12px 8px; }
+  .senior-details__metric>strong { font-size:19px; }
+  .senior-details__metric p { font-size:10px; }
+  .senior-details__location { display:grid; grid-template-columns:21px minmax(0,1fr); padding:14px; }
+  .senior-details__location button { grid-column:2; justify-self:start; }
+  .senior-details__footer { padding:16px 18px; }
+  .senior-details__footer button { padding:10px; font-size:11px; }
+}
