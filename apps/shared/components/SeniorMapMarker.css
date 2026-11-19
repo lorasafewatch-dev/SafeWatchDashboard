@@ -1,0 +1,11 @@
+.senior-photo-map-marker { background:transparent; border:0; }
+.senior-photo-map-pin { --pin-color:#d83e4e; position:relative; width:56px; height:68px; filter:drop-shadow(0 3px 4px #152e3338); }
+.senior-photo-map-pin--live { --pin-color:#2175d9; }
+.senior-photo-map-pin--last { --pin-color:#b97917; }
+.senior-photo-map-pin--sos-live .senior-photo-map-pin__photo { outline:3px solid #2175d9; outline-offset:1px; }
+.senior-photo-map-pin--sos-last .senior-photo-map-pin__photo { outline:3px solid #b97917; outline-offset:1px; }
+.senior-photo-map-pin__tip { position:absolute; bottom:4px; left:20px; width:16px; height:16px; background:var(--pin-color); transform:rotate(45deg); border-radius:0 0 3px; }
+.senior-photo-map-pin__photo { position:relative; z-index:1; display:block; width:56px; height:56px; padding:3px; border:4px solid var(--pin-color); border-radius:50%; background:white; overflow:hidden; }
+.senior-photo-map-pin__photo img.senior-photo { display:block; width:100%; height:100%; border-radius:50%; object-fit:cover; }
+.senior-photo-map-pin__badge { position:absolute; z-index:2; left:50%; bottom:7px; transform:translateX(-50%); color:white; background:var(--pin-color); border:2px solid white; padding:2px 5px; border-radius:5px; font:750 9px/1.2 system-ui,sans-serif; letter-spacing:.03em; }
+.senior-photo-map-marker:focus-visible { outline:3px solid #142f50; outline-offset:4px; border-radius:30px; }

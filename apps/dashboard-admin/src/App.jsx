@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { isCurrentGpsPoint, telemetryTimestamp } from '../../shared/gpsStatus.js';
 import { dashboardLocationAt, parseGpsPoint } from '../../shared/gpsLocation.js';
 import { MapNavigation, SafeWatchTiles } from '../../shared/components/SafeWatchMap.jsx';
-import { ALERT_QUERY_FILTER, acknowledgeIncident, alertTitle, batteryAlertMessage, confirmationErrorMessage, groupAlertIncidents, needsBarangayAttention } from '../../shared/alertLifecycle.js';
+import { ALERT_QUERY_FILTER, acknowledgeIncident, alertTitle, batteryAlertMessage, confirmationErrorMessage, groupAlertIncidents } from '../../shared/alertLifecycle.js';
 import LocationHistory from '../../shared/components/LocationHistory.jsx';
 import NotificationBell from '../../shared/components/NotificationBell.jsx';
 import SosResponseUpdates, { SosResponseIndicator } from '../../shared/components/SosResponseStatus.jsx';
@@ -70,6 +70,8 @@ import SosLocation from '../../shared/components/SosLocation.jsx';
 import useFamilyRequestNotifications from '../../shared/components/useFamilyRequestNotifications.js';
 import SeniorPhotoEditor, { PhotoUploadField } from './components/SeniorPhotoEditor.jsx';
 import SeniorDetails from './components/SeniorDetails.jsx';
+import SosResponseMap from './components/SosResponseMap.jsx';
+import { showAdminIncident } from './sosResponseMap.js';
 import { saveSeniorPhoto, prepareSeniorPhoto } from '../../shared/seniorPhotos.js';
 import { normalizeWatchId } from '../../shared/familySeniors.js';
 
@@ -179,6 +181,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const accessNotifications = useFamilyRequestNotifications(supabase, isLoggedIn ? userId : null, 'barangay');
   const [dismissedAlerts] = useState(new Set());
   const [selectedAlert, setSelectedAlert] = useState(null);
+  const [responseIncident, setResponseIncident] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const prevAlertIds = React.useRef(new Set());
@@ -267,6 +270,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     seniorFetchSequence.current += 1;
     setDeletingSenior(null);
     setViewingSeniorId(null);
+    setResponseIncident(null);
     setSeniorMessage('');
     previousIncidents.current = [];
     confirmedKeys.current.clear();
@@ -434,6 +438,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     setSosResponses(current => current.filter(item => item.device_id !== id));
     previousIncidents.current = previousIncidents.current.filter(item => item.device_id !== id);
     setSelectedAlert(current => current?.deviceId === id ? null : current);
+    setResponseIncident(current => current?.device_id === id ? null : current);
     setViewingSeniorId(current => current === id ? null : current);
     setSelectedSeniorLoc(null);
     pendingAlertTone.current = null;
@@ -452,6 +457,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       const rows = await withRequestTimeout(loadSosResponses(supabase), 10000, 'SOS response updates took too long.');
       if (request !== sosResponsesRequest.current) return;
       setSosResponses(rows); setSosResponsesError('');
+      setResponseIncident(current => rows.find(row => String(row.id) === String(current?.id)) || current);
     } catch (error) {
       if (request !== sosResponsesRequest.current) return;
       setSosResponsesError(['PGRST202','42883'].includes(error.code) ? 'SOS response updates need the SafeWatch database update.' : 'SOS response updates could not be refreshed. Retry to see the latest decisions.');
@@ -474,14 +480,14 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       if (request !== alertFetchSequence.current) return;
       const incidents = groupAlertIncidents(data || [], previousIncidents.current);
       previousIncidents.current = incidents;
-      const escalated = incidents.filter(incident => needsBarangayAttention(incident)
+      const escalated = incidents.filter(incident => showAdminIncident(incident)
         && !confirmedKeys.current.has(incident.key));
       const mapped = escalated.map(incident => ({
         ...incident, seniorName: incident.devices?.patient_name || 'Unknown Device',
         seniorId: incident.device_id, deviceId: incident.device_id,
         date: new Date(incident.created_at).toLocaleDateString(),
         time: new Date(incident.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        fullTime: new Date(incident.created_at).toLocaleString(), status: incident.alert_type === 'LOW_BATTERY' ? 'BATTERY_LOW' : 'ESCALATED_BHW',
+        fullTime: new Date(incident.created_at).toLocaleString(), status: incident.alert_type === 'LOW_BATTERY' ? 'BATTERY_LOW' : incident.alert_type === 'SOS' ? incident.details?.status || 'PENDING_FAMILY' : 'ESCALATED_BHW',
         rawType: incident.alert_type, rawDetails: incident.details || {},
         deviceName: incident.devices?.device_name || '',
       }));
@@ -508,6 +514,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         return fresh ? { ...fresh, historyView: current.historyView } : current.historyView ? current : null;
       });
       setSosAlerts(mapped);
+      setResponseIncident(current => mapped.find(row => String(row.id) === String(current?.id)) || current);
       setNotificationsError('');
     } catch (error) {
       console.error('Error fetching alerts:', error.message);
@@ -519,6 +526,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     if (incident.key) { confirmedKeys.current.add(incident.key); activeAlertKeys.current.delete(incident.key); }
     setSosAlerts(items => items.filter(item => String(item.id) !== String(incident.id)));
     setSelectedAlert(current => String(current?.id) === String(incident.id) ? null : current);
+  };
+
+  const openResponseMap = incident => {
+    setResponseIncident(incident);
+    setSelectedAlert(null);
+    navigate('SOS Alerts');
   };
 
   const handleDismissAlertDB = async (incident) => {
@@ -553,6 +566,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     setAlertActionError('');
     pendingAlertTone.current = null;
     stopAlertSounds();
+    let confirmedSos = null;
     try {
       alertFetchSequence.current += 1;
       alertsBusy.current = false;
@@ -560,6 +574,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         if (incident.alert_type === 'SOS') {
           const updated = await respondToSos(supabase, incident, 'confirmed', 'barangay');
           setSosResponses(current => mergeSosResponse(current, updated));
+          confirmedSos ||= updated;
         } else await acknowledgeIncident(supabase, incident, 'barangay');
         commitConfirmation(incident);
       }
@@ -569,6 +584,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     } finally {
       confirmationBusy.current = false;
       setConfirmingAlerts(false);
+      if (confirmedSos) openResponseMap(confirmedSos);
       await fetchAlerts();
     }
   };
@@ -588,6 +604,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       const updated = await respondToSos(supabase, incident, decision, 'barangay');
       setSosResponses(current => mergeSosResponse(current, updated));
       commitConfirmation(incident);
+      if (decision === 'confirmed') openResponseMap(updated);
     } catch (error) { setAlertActionError(sosResponseError(error)); }
     finally {
       confirmationBusy.current = false;
@@ -985,6 +1002,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       return (
         <div className="admin-page admin-alerts">
           <div className="admin-alert-intro"><p>Confirm a response, or decline an SOS to notify the family.</p><button data-confirm-alert disabled={confirmingAlerts || !visibleAlerts.length} onClick={handleDismissAllDB} className="btn-outline">Confirm all responses</button></div>
+          <SosResponseMap client={supabase} seniors={seniors} active={sosAlerts} responses={sosResponses} selected={responseIncident} onSelect={setResponseIncident} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} busy={confirmingAlerts} now={liveTime.getTime()}/>
           {/* Alert Summary Card */}
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6 w-fit">
             <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
@@ -1041,7 +1059,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                         <SosResponseIndicator incident={alert}/>
                         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg w-fit ${alert.status === 'ESCALATED_BHW' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                           {alert.status === 'ESCALATED_BHW' ? <AlertCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                          <span className="text-[10px] font-black uppercase tracking-wider">{alert.rawType === 'LOW_BATTERY' ? 'Charge watch' : alert.status === 'ESCALATED_BHW' ? 'Escalated' : alert.status}</span>
+                          <span className="text-[10px] font-black uppercase tracking-wider">{alert.rawType === 'LOW_BATTERY' ? 'Charge watch' : alert.status === 'ESCALATED_BHW' ? 'Escalated' : alert.status === 'PENDING_FAMILY' ? 'Awaiting response' : alert.status}</span>
                         </div>
                       </td>
                       <td className="px-8 py-6 text-right">
@@ -1501,6 +1519,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </button>}
               </div>
               <SosLocation incident={selectedAlert}/>
+              {selectedAlert.alert_type === 'SOS' && <button type="button" onClick={() => openResponseMap(selectedAlert)} className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 font-semibold text-emerald-800">View response map</button>}
               <SosResponseIndicator incident={selectedAlert}/>
               {selectedAlertPending && selectedAlert.alert_type === 'SOS' && <button data-confirm-alert disabled={confirmingAlerts || sosResponseState(selectedAlert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(selectedAlert, 'declined')} className="sos-decline-button w-full">Decline — notify family</button>}
             </div>
