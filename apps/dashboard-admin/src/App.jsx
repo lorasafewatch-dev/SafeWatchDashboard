@@ -830,8 +830,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                           <span className="text-[10px]">View</span>
                         </button>
                         <button type="button" onClick={() => setEditingPhoto(senior)} className="rounded-lg px-3 py-2 bg-emerald-50 text-emerald-700 font-bold">Edit photo</button>
-                        <button type="button" onClick={() => { setDeletingSenior(senior); setSeniorMessage(''); }} aria-label={`Delete senior ${senior.name}`} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 rounded-lg font-bold hover:bg-red-100 transition-all">
-                          <Trash2 className="w-4 h-4" aria-hidden="true"/><span className="text-xs">Delete senior</span>
+                        <button type="button" onClick={() => { setDeletingSenior(senior); setSeniorMessage(''); }} aria-label={`Delete Watch for ${senior.name}`} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 rounded-lg font-bold hover:bg-red-100 transition-all">
+                          <Trash2 className="w-4 h-4" aria-hidden="true"/><span className="text-xs">Delete Watch</span>
                         </button>
                         </div>
                       </td>
