@@ -1,5 +1,6 @@
 export const RESPONSE_WINDOW_MS = 3 * 60 * 1000;
 export const REMINDER_WINDOW_MS = 30 * 1000;
+export const formatDuration = seconds => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
 // Include confirmed open incidents so an old cached identity cannot reopen them.
 // Closed acknowledged history must not crowd active incidents out of the query.
 export const ALERT_QUERY_FILTER = 'details->>incident_open.eq.true,details->>status.is.null,details->>status.in.(PENDING_FAMILY,ESCALATED_BHW),alert_type.in.(RESOLVE_ALL,RESOLVE_GEOFENCE)';
@@ -104,7 +105,9 @@ export function incidentSnapshot(incidents) {
 }
 
 export function needsBarangayAttention(incident, now = Date.now()) {
+  if (incident.alert_type === 'SOS' && incident.details?.sos_family_first === true && !incident.details.sos_transferred_at) return false;
   const assigned = incident.alert_type === 'SOS' ? incident.details?.sos_assigned_to : null;
+  if (incident.alert_type === 'SOS' && incident.details?.sos_family_first === true && !incident.details.sos_transferred_at) return false;
   return activeStatuses.has(incident.details?.status || 'PENDING_FAMILY')
     && incident.details?.incident_open !== false
     && (assigned ? ['barangay','both'].includes(assigned)

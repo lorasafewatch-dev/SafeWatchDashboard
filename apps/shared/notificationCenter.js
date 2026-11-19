@@ -7,8 +7,10 @@ const entity = row => `${row.device_id}:${row.alert_type}:${row.id}`;
 const time = value => Date.parse(value) || 0;
 
 export function buildBellNotifications(active = [], responses = [], userId = null, requests = [], app = 'family') {
-  const rows = new Map(active.map(incident => [entity(incident), { incident, active: true }]));
+  const canReceive = incident => app !== 'barangay' || incident.alert_type !== 'SOS' || incident.details?.sos_family_first !== true || !!incident.details.sos_transferred_at;
+  const rows = new Map(active.filter(canReceive).map(incident => [entity(incident), { incident, active: true }]));
   for (const receipt of responses) {
+    if (!canReceive(receipt)) continue;
     const key = entity(receipt);
     const existing = rows.get(key);
     if (!existing || version(receipt) > version(existing.incident)
@@ -20,8 +22,8 @@ export function buildBellNotifications(active = [], responses = [], userId = nul
     const details = incident.details || {};
     const response = sosResponseState(incident);
     const isSos = incident.alert_type === 'SOS';
-    const isUpdate = isSos && (!!details.sos_response_at || terminal(incident));
-    const at = isUpdate ? details.sos_response_at || details.acknowledged_at || incident.created_at
+    const isUpdate = isSos && (!!details.sos_response_at || !!details.sos_transferred_at || terminal(incident));
+    const at = isUpdate ? details.sos_response_at || details.sos_transferred_at || details.acknowledged_at || incident.created_at
       : details.first_seen_at || incident.created_at;
     const decisions = Object.values(response.responses).filter(Boolean);
     const latestDecision = decisions.find(item => item.at && item.at === details.sos_response_at)

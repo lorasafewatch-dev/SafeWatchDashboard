@@ -10,11 +10,25 @@ export function sosResponseState(incident) {
   if (!responses.barangay && details.status === 'ACKNOWLEDGED_BHW') responses.barangay = { decision: 'confirmed', at: details.acknowledged_at };
   const confirmed = ['ACKNOWLEDGED_FAMILY','ACKNOWLEDGED_BHW'].includes(details.status);
   const assigned = details.sos_assigned_to;
+  const transferred = !!details.sos_transferred_at;
+  const waitingForFamily = details.sos_family_first === true && !transferred && !confirmed
+    && details.incident_open !== false && ['PENDING_FAMILY','ESCALATED_BHW'].includes(details.status || 'PENDING_FAMILY');
   const message = confirmed ? details.status === 'ACKNOWLEDGED_FAMILY' ? 'Family confirmed the response' : 'Barangay secretary confirmed the response'
+    : waitingForFamily ? 'Waiting for family response'
     : assigned === 'both' ? 'Both sides declined. SOS still needs a response.'
+    : assigned === 'barangay' && details.sos_transfer_reason === 'automatic_timeout' ? 'No family response after 3 minutes. Barangay notified.'
+    : assigned === 'barangay' && details.sos_transfer_reason === 'family_unavailable' ? 'SOS transferred to barangay. Waiting for a response.'
     : assigned === 'barangay' ? 'Family declined. Barangay secretary notified.'
     : assigned === 'family' ? 'Barangay secretary declined. Family notified.' : 'Awaiting a response';
-  return { responses, confirmed, assigned, message };
+  return { responses, confirmed, assigned, message, transferred, waitingForFamily };
+}
+
+export function sosTransferLabel(incident) {
+  const reason = incident?.details?.sos_transfer_reason;
+  if (reason === 'automatic_timeout') return 'Automatic transfer · No family response after 3 minutes';
+  if (reason === 'family_unavailable') return 'Transferred by family';
+  if (reason === 'family_request' || incident?.details?.source === 'family_app') return 'Family requested assistance';
+  return '';
 }
 
 export async function respondToSos(client, incident, decision, role = 'family') {

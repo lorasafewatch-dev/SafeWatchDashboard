@@ -7,6 +7,17 @@ const sos=(details={})=>({id:1,device_id:'watch-a',alert_type:'SOS',created_at:a
 const receipt=(version=1,role='barangay',decision='confirmed')=>sos({status:decision==='confirmed'?role==='family'?'ACKNOWLEDGED_FAMILY':'ACKNOWLEDGED_BHW':'ESCALATED_BHW',sos_response_version:version,sos_response_at:at,sos_assigned_to:decision==='confirmed'?'none':role==='family'?'barangay':'family',sos_responses:{[role]:{decision,at,by:`${role}-user`}}});
 function memoryStorage() { const data=new Map(); return {getItem:key=>data.get(key),setItem:(key,value)=>data.set(key,value)}; }
 
+test('family-only SOS cannot enter the staff bell, and a timeout creates one new family notification',()=>{
+  const pending=sos({sos_family_first:true,sos_assigned_to:'family'});
+  const family=buildBellNotifications([pending],[],'family-user');
+  assert.equal(family.length,1);
+  assert.equal(buildBellNotifications([pending],[pending],'staff',[],'barangay').length,0);
+  const transferred=sos({sos_family_first:true,sos_assigned_to:'barangay',sos_transferred_at:'2026-11-03T04:03:00Z',sos_transfer_reason:'automatic_timeout',sos_response_version:1});
+  const update=buildBellNotifications([],[transferred],'family-user');
+  assert.equal(update.length,1); assert.notEqual(update[0].key,family[0].key); assert.match(update[0].message,/No family response after 3 minutes/);
+  assert.equal(buildBellNotifications([transferred],[transferred],'staff',[],'barangay').length,1);
+});
+
 test('bell includes a secretary confirmation when no active alert remains',()=>{
   const notifications=buildBellNotifications([],[receipt()], 'family-user');
   assert.equal(notifications.length,1);

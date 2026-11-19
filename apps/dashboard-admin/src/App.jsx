@@ -316,9 +316,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   };
 
   const [seniorRecords, setSeniors] = useState([]);
-  const seniors = seniorRecords.map(senior => dashboardLocationAt(senior, liveTime.getTime()));
-  const viewingSenior = seniors.find(senior => senior.id === viewingSeniorId);
   const [sosAlerts, setSosAlerts] = useState([]);
+  const seniors = seniorRecords.map(senior => {
+    const current = dashboardLocationAt(senior, liveTime.getTime());
+    const staffSos = sosAlerts.some(incident => incident.device_id === senior.id && incident.alert_type === 'SOS');
+    return staffSos ? { ...current, isSOS: true, type: 'sos', status: 'SOS ALERT!' } : current;
+  });
+  const viewingSenior = seniors.find(senior => senior.id === viewingSeniorId);
 
   // Registration Form States
   const [registerName, setRegisterName] = useState('');
@@ -376,10 +380,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
           let zoneStatus = 'Outside Safe Zone';
           let zoneType = 'outside';
-          if (latestTelemetry && latestTelemetry.is_sos) {
-            zoneStatus = 'SOS ALERT!';
-            zoneType = 'sos';
-          } else if (!hasGpsLock) {
+          if (!hasGpsLock) {
             zoneStatus = 'No current GPS fix';
             zoneType = 'waiting';
           } else if (isInSafeZone) {
@@ -416,7 +417,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
             lng: lng,
             time: packetTime ? new Date(packetTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
             date: packetTime ? new Date(packetTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
-            isSOS: latestTelemetry ? latestTelemetry.is_sos : false,
+            isSOS: false,
             type: zoneType
           };
         })

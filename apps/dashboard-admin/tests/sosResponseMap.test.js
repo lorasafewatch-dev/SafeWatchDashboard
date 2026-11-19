@@ -4,9 +4,13 @@ import { isAcknowledgedSos, isPendingSos, responseMapIncidents, responseMapPosit
 
 const now = Date.parse('2026-11-19T10:00:00Z');
 const incident = (id, status = 'PENDING_FAMILY') => ({ id, device_id: `watch-${id}`, alert_type: 'SOS', created_at: '2026-11-19T09:59:58Z', details: { status, incident_open: true } });
-test('new SOS is immediately visible, including family-assigned incidents; non-SOS escalation rules are retained', () => {
+test('family-only SOS stays out of admin until transfer; non-SOS escalation rules are retained', () => {
   const sos = incident(1); sos.details.sos_assigned_to = 'family';
-  assert.equal(showAdminIncident(sos, now), true);
+  sos.details.sos_family_first = true;
+  assert.equal(showAdminIncident(sos, now), false);
+  assert.equal(showAdminIncident(sos, now + 900000), false);
+  const transferred = { ...sos, details: { ...sos.details, status: 'ESCALATED_BHW', sos_assigned_to: 'barangay', sos_transferred_at: new Date(now).toISOString() } };
+  assert.equal(showAdminIncident(transferred, now), true);
   assert.equal(showAdminIncident({ ...sos, alert_type: 'GEOFENCE' }, now), false);
   assert.equal(showAdminIncident(incident(2, 'ACKNOWLEDGED_BHW'), now), false);
 });

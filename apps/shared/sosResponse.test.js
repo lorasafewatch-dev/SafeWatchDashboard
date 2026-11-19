@@ -7,6 +7,18 @@ const now = Date.parse('2026-11-03T04:00:00Z');
 const row = (details = {}) => ({ id: 1, device_id: 'watch-a', alert_type: 'SOS', created_at: new Date(now).toISOString(),
   details: { status: 'PENDING_FAMILY', incident_open: true, first_seen_at: new Date(now).toISOString(), ...details } });
 
+test('a family-first SOS stays with family until a server handoff receipt exists', () => {
+  const pending=row({sos_family_first:true,sos_assigned_to:'family'});
+  assert.equal(needsBarangayAttention(pending,now+900000),false);
+  assert.equal(sosResponseState(pending).waitingForFamily,true);
+  assert.equal(sosResponseState(pending).message,'Waiting for family response');
+  const transferred=row({sos_family_first:true,sos_assigned_to:'barangay',sos_transferred_at:new Date(now+180000).toISOString(),sos_transfer_reason:'automatic_timeout'});
+  assert.equal(needsBarangayAttention(transferred,now+180000),true);
+  assert.equal(sosResponseState(transferred).waitingForFamily,false);
+  assert.equal(isFamilyActionable(transferred),false);
+  assert.match(sosResponseState(transferred).message,/No family response after 3 minutes/);
+});
+
 test('family decline immediately notifies barangay even before the response window and after another watch packet', () => {
   const declined = row({ sos_assigned_to: 'barangay', sos_response_version: 1, sos_responses: { family: { decision: 'declined' } } });
   assert.equal(needsBarangayAttention(declined, now), true);
