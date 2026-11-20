@@ -12,10 +12,16 @@ export function isAcknowledgedSos(incident) {
   return incident?.alert_type === 'SOS' && ['ACKNOWLEDGED_FAMILY', 'ACKNOWLEDGED_BHW'].includes(incident.details?.status);
 }
 
-export function isClearableSosHistory(incident) {
-  return incident?.alert_type === 'SOS' && barangaySosStage(incident) !== 'on_the_way'
-    && (isAcknowledgedSos(incident) || incident.details?.incident_open === false
-      || ['RESOLVED', 'MERGED'].includes(incident.details?.status));
+export function sosResponseTabs(records, clearedHistory, now) {
+  const pending = [];
+  const onTheWay = [];
+  const history = [];
+  for (const incident of records) {
+    if (isPendingSos(incident, now)) pending.push(incident);
+    else if (barangaySosStage(incident) === 'on_the_way') onTheWay.push(incident);
+    else if (!clearedHistory.has(String(incident.id))) history.push(incident);
+  }
+  return { active: [...pending, ...onTheWay], history };
 }
 
 export function showAdminIncident(incident, now) {

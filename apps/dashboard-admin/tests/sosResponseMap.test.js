@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isAcknowledgedSos, isClearableSosHistory, isPendingSos, responseMapIncidents, responseMapPositions, responseMapZone, showAdminIncident } from '../src/sosResponseMap.js';
+import { isAcknowledgedSos, isPendingSos, responseMapIncidents, responseMapPositions, responseMapZone, showAdminIncident, sosResponseTabs } from '../src/sosResponseMap.js';
 
 const now = Date.parse('2026-11-19T10:00:00Z');
 const incident = (id, status = 'PENDING_FAMILY') => ({ id, device_id: `watch-${id}`, alert_type: 'SOS', created_at: '2026-11-19T09:59:58Z', details: { status, incident_open: true } });
@@ -30,13 +30,22 @@ test('arrival removes an SOS from the response map even with a stale pending row
   assert.deepEqual(responseMapIncidents([pending, other], [arrived], onTheWay), [other]);
   assert.deepEqual(responseMapIncidents([other], [onTheWay], arrived), [other]);
 });
-test('clearing SOS history excludes pending responses and barangay personnel on the way', () => {
+test('the history tab clears completely while pending responses and personnel on the way stay active', () => {
   const familyConfirmed = incident(1, 'ACKNOWLEDGED_FAMILY');
   const oldConfirmation = incident(2, 'ACKNOWLEDGED_BHW');
   const onTheWay = { ...oldConfirmation, details: { ...oldConfirmation.details, incident_open: false, acknowledged_at: new Date(now).toISOString() } };
+  const responding = { ...onTheWay, id: 6, created_at: '2026-11-19T09:00:00Z' };
   const awaitingFamily = { ...incident(3), details: { status: 'PENDING_FAMILY', sos_assigned_to: 'family' } };
-  assert.deepEqual([familyConfirmed, oldConfirmation, onTheWay, awaitingFamily, incident(4, 'ESCALATED_BHW'), incident(5, 'RESOLVED')]
-    .filter(isClearableSosHistory).map(row => row.id), [1, 2, 5]);
+  const pending = incident(4, 'ESCALATED_BHW');
+  const resolved = incident(5, 'RESOLVED');
+  const records = [familyConfirmed, oldConfirmation, responding, awaitingFamily, pending, resolved];
+  const tabs = sosResponseTabs(records, new Set(), now);
+  assert.deepEqual(tabs.active, [pending, responding]);
+  assert.deepEqual(tabs.history, [familyConfirmed, oldConfirmation, awaitingFamily, resolved]);
+  const cleared = new Set(tabs.history.map(row => String(row.id)));
+  assert.deepEqual(sosResponseTabs(records, cleared, now), { active: [pending, responding], history: [] });
+  const returned = { ...awaitingFamily, details: { status: 'ESCALATED_BHW', sos_assigned_to: 'barangay' } };
+  assert.deepEqual(sosResponseTabs([returned], cleared, now), { active: [returned], history: [] });
 });
 test('saved SOS pin stays fixed when the watch moves, and stale fixes retain their recording time', () => {
   const sos = incident(1);

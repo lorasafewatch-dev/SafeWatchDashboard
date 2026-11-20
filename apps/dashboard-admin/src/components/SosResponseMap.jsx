@@ -12,7 +12,7 @@ import { incidentTime } from '../../../shared/sosLocation.js';
 import { barangaySosStage, sosResponseState, sosTransferLabel } from '../../../shared/sosResponse.js';
 import { SAN_ISIDRO_EAST_BOUNDARY } from '../../../shared/safeZone.js';
 import { withRequestTimeout } from '../../../shared/requestTimeout.js';
-import { isAcknowledgedSos, isClearableSosHistory, isPendingSos, responseMapIncidents, responseMapPositions, responseMapZone } from '../sosResponseMap.js';
+import { isAcknowledgedSos, isPendingSos, responseMapIncidents, responseMapPositions, responseMapZone, sosResponseTabs } from '../sosResponseMap.js';
 import './SosResponseMap.css';
 
 const coordinates = point => `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
@@ -106,38 +106,37 @@ export default function SosResponseMap({ client, userId, seniors, active, respon
   const historyKey = 'safewatch.barangay.sos-history.v1:' + userId;
   const [clearedHistory, setClearedHistory] = useState(() => loadClearedHistory(historyKey));
   const [historyCleared, setHistoryCleared] = useState(false);
-  const records = useMemo(() => responseMapIncidents(active, responses, selected)
-    .filter(row => !isClearableSosHistory(row) || !clearedHistory.has(String(row.id))), [active, responses, selected, clearedHistory]);
-  const selectedRecord = records.find(row => String(row.id) === String(selected?.id));
-  // An explicit selection, including a newly acknowledged SOS, determines its tab.
-  const selectedTab = selectedRecord ? isPendingSos(selectedRecord) ? 'active' : 'acknowledged' : tab;
-  const rows = records.filter(row => selectedTab === 'active' ? isPendingSos(row) : !isPendingSos(row));
-  const historyToClear = rows.filter(isClearableSosHistory);
-  const incident = selectedRecord || rows[0];
+  const records = useMemo(() => responseMapIncidents(active, responses, selected), [active, responses, selected]);
+  const tabs = sosResponseTabs(records, clearedHistory, now);
+  const selectedActive = tabs.active.find(row => String(row.id) === String(selected?.id));
+  const selectedHistory = tabs.history.find(row => String(row.id) === String(selected?.id));
+  const selectedTab = selectedActive ? 'active' : selectedHistory ? 'history' : tab;
+  const rows = tabs[selectedTab];
+  const incident = selectedActive || selectedHistory || rows[0];
   const senior = seniors.find(row => row.id === incident?.device_id);
   const acknowledged = isAcknowledgedSos(incident);
   const acknowledgedAt = incident?.details?.acknowledged_at || incident?.details?.sos_responses?.barangay?.at || incident?.details?.sos_responses?.family?.at;
   const stage = barangaySosStage(incident);
-  const selectTab = next => { setTab(next); onSelect(records.find(row => next === 'active' ? isPendingSos(row) : !isPendingSos(row)) || null); };
+  const selectTab = next => { setTab(next); onSelect(tabs[next][0] || null); };
   const clearHistory = () => {
-    const next = new Set([...clearedHistory, ...historyToClear.map(row => String(row.id))]);
+    const next = new Set([...clearedHistory, ...tabs.history.map(row => String(row.id))]);
     setClearedHistory(next);
     setHistoryCleared(true);
-    setTab('acknowledged');
-    if (isClearableSosHistory(selectedRecord)) onSelect(null);
+    setTab('history');
+    onSelect(null);
     try { sessionStorage.setItem(historyKey, JSON.stringify([...next])); }
     catch { /* Clearing still works if browser storage is unavailable. */ }
   };
   return <section className="sos-response-workspace" aria-label="SOS response workspace">
     {acknowledged && <div role="status" className="sos-response-workspace__success"><span><Check aria-hidden="true"/></span><div><strong>SOS response acknowledged</strong><p>{sosResponseState(incident).message}{acknowledgedAt && ` · ${incidentTime(acknowledgedAt)}`}</p></div></div>}
     <div className="sos-response-workspace__layout">
-      <aside className="sos-response-workspace__incidents"><h2>SOS incidents</h2><div className="sos-response-workspace__tabs" role="group" aria-label="SOS incident status"><button type="button" aria-pressed={selectedTab === 'active'} onClick={() => selectTab('active')}>Active</button><button type="button" aria-pressed={selectedTab === 'acknowledged'} onClick={() => selectTab('acknowledged')}>Acknowledged & history</button></div>
-        {selectedTab === 'acknowledged' && <div className="sos-response-workspace__history-tools">
-          <button type="button" className="sos-response-workspace__clear" onClick={clearHistory} disabled={!historyToClear.length}><ListX aria-hidden="true"/>Clear history</button>
+      <aside className="sos-response-workspace__incidents"><h2>SOS incidents</h2><div className="sos-response-workspace__tabs" role="group" aria-label="SOS incident status"><button type="button" aria-pressed={selectedTab === 'active'} onClick={() => selectTab('active')}>Active</button><button type="button" aria-pressed={selectedTab === 'history'} onClick={() => selectTab('history')}>Acknowledged & history</button></div>
+        {selectedTab === 'history' && <div className="sos-response-workspace__history-tools">
+          <button type="button" className="sos-response-workspace__clear" onClick={clearHistory} disabled={!tabs.history.length}><ListX aria-hidden="true"/>Clear history</button>
           <p role="status">{historyCleared && 'History cleared. Saved records are in Activity & Alert History.'}</p>
         </div>}
-        <div className="sos-response-workspace__list">{rows.map(row => <button type="button" key={row.id} aria-pressed={String(row.id) === String(incident?.id)} aria-label={`Select SOS ${row.id} for ${nameOf(row, seniors)}, Watch ID ${row.device_id}`} onClick={() => onSelect(row)}><SeniorPhoto deviceId={row.device_id}/><span><strong>{nameOf(row, seniors)}</strong><small>Watch ID: {row.device_id}</small><small>SOS · {incidentTime(row.created_at)}</small>{sosTransferLabel(row) && <small>{sosTransferLabel(row)}</small>}<em>{barangaySosStage(row) === 'on_the_way' ? 'On the way' : isAcknowledgedSos(row) ? 'Acknowledged' : isPendingSos(row) ? 'Awaiting response' : 'Incident history'}</em></span></button>)}{!rows.length && <p className="sos-response-workspace__empty">{selectedTab === 'active' ? 'No active SOS incidents.' : 'No SOS history to display.'}</p>}</div>
-        {incident && <><div className="sos-response-workspace__identity"><ShieldCheck aria-hidden="true"/><div><strong>{responseMapZone(senior).name}</strong><p>{senior?.safeZone?.radius ? `${senior.safeZone.radius} m assigned geofence` : senior ? 'Default barangay boundary' : 'Senior record unavailable'}</p></div></div><button type="button" className="sos-response-workspace__details" onClick={() => onDetails(incident)}><History aria-hidden="true"/>View incident details</button>{isPendingSos(incident) && <button type="button" data-confirm-alert className="sos-response-workspace__confirm" disabled={busy} onClick={() => onConfirm(incident)}>{busy ? 'Saving response…' : 'Confirm response & open map'}</button>}</>}
+        <div className="sos-response-workspace__list">{rows.map(row => <button type="button" key={row.id} aria-pressed={String(row.id) === String(incident?.id)} aria-label={`Select SOS ${row.id} for ${nameOf(row, seniors)}, Watch ID ${row.device_id}`} onClick={() => onSelect(row)}><SeniorPhoto deviceId={row.device_id}/><span><strong>{nameOf(row, seniors)}</strong><small>Watch ID: {row.device_id}</small><small>SOS · {incidentTime(row.created_at)}</small>{sosTransferLabel(row) && <small>{sosTransferLabel(row)}</small>}<em>{barangaySosStage(row) === 'on_the_way' ? 'On the way' : isAcknowledgedSos(row) ? 'Acknowledged' : isPendingSos(row, now) ? 'Awaiting response' : 'Incident history'}</em></span></button>)}{!rows.length && <p className="sos-response-workspace__empty">{selectedTab === 'active' ? 'No active SOS incidents.' : 'No SOS history to display.'}</p>}</div>
+        {incident && <><div className="sos-response-workspace__identity"><ShieldCheck aria-hidden="true"/><div><strong>{responseMapZone(senior).name}</strong><p>{senior?.safeZone?.radius ? `${senior.safeZone.radius} m assigned geofence` : senior ? 'Default barangay boundary' : 'Senior record unavailable'}</p></div></div><button type="button" className="sos-response-workspace__details" onClick={() => onDetails(incident)}><History aria-hidden="true"/>View incident details</button>{isPendingSos(incident, now) && <button type="button" data-confirm-alert className="sos-response-workspace__confirm" disabled={busy} onClick={() => onConfirm(incident)}>{busy ? 'Saving response…' : 'Confirm response & open map'}</button>}</>}
         {stage === 'on_the_way' && <button type="button" data-confirm-alert className="sos-response-workspace__confirm" disabled={busy} onClick={() => onArrive(incident)}>{busy ? 'Saving arrival…' : 'Mark as arrived'}</button>}
       </aside>
       <div className="sos-response-map">{incident ? <IncidentMap key={incident.device_id} client={client} incident={incident} senior={senior} now={now} variant={variant} onVariantChange={setVariant} trustedHubs={trustedHubs}/> : <div className="sos-response-map__empty"><MapPin aria-hidden="true"/><h2>Select an SOS incident</h2><p>Its saved location, latest watch location and assigned geofence will appear here.</p></div>}</div>
