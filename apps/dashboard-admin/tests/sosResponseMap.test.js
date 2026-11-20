@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isAcknowledgedSos, isPendingSos, responseMapIncidents, responseMapPositions, responseMapZone, showAdminIncident } from '../src/sosResponseMap.js';
+import { isAcknowledgedSos, isClearableSosHistory, isPendingSos, responseMapIncidents, responseMapPositions, responseMapZone, showAdminIncident } from '../src/sosResponseMap.js';
 
 const now = Date.parse('2026-11-19T10:00:00Z');
 const incident = (id, status = 'PENDING_FAMILY') => ({ id, device_id: `watch-${id}`, alert_type: 'SOS', created_at: '2026-11-19T09:59:58Z', details: { status, incident_open: true } });
@@ -29,6 +29,14 @@ test('arrival removes an SOS from the response map even with a stale pending row
   assert.deepEqual(responseMapIncidents([other], [onTheWay], onTheWay), [onTheWay, other]);
   assert.deepEqual(responseMapIncidents([pending, other], [arrived], onTheWay), [other]);
   assert.deepEqual(responseMapIncidents([other], [onTheWay], arrived), [other]);
+});
+test('clearing SOS history excludes pending responses and barangay personnel on the way', () => {
+  const familyConfirmed = incident(1, 'ACKNOWLEDGED_FAMILY');
+  const oldConfirmation = incident(2, 'ACKNOWLEDGED_BHW');
+  const onTheWay = { ...oldConfirmation, details: { ...oldConfirmation.details, incident_open: false, acknowledged_at: new Date(now).toISOString() } };
+  const awaitingFamily = { ...incident(3), details: { status: 'PENDING_FAMILY', sos_assigned_to: 'family' } };
+  assert.deepEqual([familyConfirmed, oldConfirmation, onTheWay, awaitingFamily, incident(4, 'ESCALATED_BHW'), incident(5, 'RESOLVED')]
+    .filter(isClearableSosHistory).map(row => row.id), [1, 2, 5]);
 });
 test('saved SOS pin stays fixed when the watch moves, and stale fixes retain their recording time', () => {
   const sos = incident(1);

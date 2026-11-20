@@ -12,6 +12,13 @@
 .sos-response-workspace__tabs button { display:grid; place-items:center; min-height:40px; padding:6px 8px; border:0; border-radius:8px; background:transparent; color:#4c6c5d; font-size:11px; line-height:1.3; text-align:center; font-weight:650; }
 .sos-response-workspace__tabs button:hover { background:#e5f1ea; }
 .sos-response-workspace__tabs button[aria-pressed=true] { background:#008c6b; color:#fff; }
+.sos-response-workspace__history-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:6px; margin:-4px 0 12px; }
+.sos-response-workspace .sos-response-workspace__clear { display:inline-flex; align-items:center; gap:6px; min-height:44px; padding:8px 12px; border:1px solid #c5ded2; border-radius:10px; background:#f6faf7; color:#21624f; font-size:12px; font-weight:650; }
+.sos-response-workspace__clear svg { width:15px; height:15px; }
+.sos-response-workspace__clear:hover:not(:disabled) { background:#e8f3ed; }
+.sos-response-workspace__clear:disabled { opacity:.55; cursor:default; }
+.sos-response-workspace__history-tools p { flex-basis:100%; margin:0; color:#4c6c5d; font-size:12px; line-height:1.45; }
+.sos-response-workspace__history-tools p:empty { flex-basis:0; margin:0; }
 .sos-response-workspace__list { display:grid; gap:10px; max-height:390px; overflow:auto; padding:3px; margin:-3px; }
 .sos-response-workspace__list>button { display:flex; gap:11px; padding:15px 12px; text-align:left; border:1px solid #e0eae3; border-radius:16px; background:#fff; min-width:0; width:100%; }
 .sos-response-workspace__list>button[aria-pressed=true] { border-color:#20ae83; background:#eef9f2; }

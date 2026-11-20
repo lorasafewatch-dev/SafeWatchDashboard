@@ -12,6 +12,12 @@ export function isAcknowledgedSos(incident) {
   return incident?.alert_type === 'SOS' && ['ACKNOWLEDGED_FAMILY', 'ACKNOWLEDGED_BHW'].includes(incident.details?.status);
 }
 
+export function isClearableSosHistory(incident) {
+  return incident?.alert_type === 'SOS' && barangaySosStage(incident) !== 'on_the_way'
+    && (isAcknowledgedSos(incident) || incident.details?.incident_open === false
+      || ['RESOLVED', 'MERGED'].includes(incident.details?.status));
+}
+
 export function showAdminIncident(incident, now) {
   return needsBarangayAttention(incident, now);
 }

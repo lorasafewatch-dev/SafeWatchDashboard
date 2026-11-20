@@ -1049,7 +1049,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       return (
         <div className="admin-page admin-alerts">
           <div className="admin-alert-intro"><p>Confirm a response to tell the family personnel are on the way. Mark the SOS as arrived once personnel reach the senior.</p><button data-confirm-alert disabled={confirmingAlerts || !visibleAlerts.length} onClick={handleDismissAllDB} className="btn-outline">Confirm all responses</button></div>
-          <SosResponseMap client={supabase} seniors={seniors} active={sosAlerts} responses={sosResponses} selected={responseIncident} onSelect={setResponseIncident} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} onArrive={incident => handleSosResponse(incident, 'arrived')} busy={confirmingAlerts} now={liveTime.getTime()} trustedHubs={trustedLocations}/>
+          <SosResponseMap key={userId} client={supabase} userId={userId} seniors={seniors} active={sosAlerts} responses={sosResponses} selected={responseIncident} onSelect={setResponseIncident} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} onArrive={incident => handleSosResponse(incident, 'arrived')} busy={confirmingAlerts} now={liveTime.getTime()} trustedHubs={trustedLocations}/>
           {/* Alert Summary Card */}
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6 w-fit">
             <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center animate-pulse">

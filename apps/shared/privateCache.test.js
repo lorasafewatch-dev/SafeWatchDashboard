@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { clearPrivateBrowserCache, installPrivateCacheCleanup } from './privateCache.js';
 
 function storage() {
-  const data=new Map([['safewatch.family.alerts.v1:a','private'],['safewatch.family.selected-senior.v1:a','watch'],['safewatch.barangay.alerts.v1:a','staff'],['safewatch.family.notifications.v1:a','family reads'],['safewatch.barangay.notifications.v1:a','staff reads'],['unrelated-preference','keep']]);
+  const data=new Map([['safewatch.family.alerts.v1:a','private'],['safewatch.family.selected-senior.v1:a','watch'],['safewatch.barangay.alerts.v1:a','staff'],['safewatch.family.notifications.v1:a','family reads'],['safewatch.barangay.notifications.v1:a','staff reads'],['safewatch.barangay.sos-history.v1:a','cleared history'],['unrelated-preference','keep']]);
   return { get length(){return data.size;},key:index=>[...data.keys()][index],removeItem:key=>data.delete(key),has:key=>data.has(key) };
 }
 test('sign-out removes family alert/watch metadata from both storage types without deleting unrelated app settings',()=>{
@@ -15,6 +15,7 @@ test('sign-out removes family alert/watch metadata from both storage types witho
     assert.equal(current.has('safewatch.barangay.alerts.v1:a'),true);
     assert.equal(current.has('safewatch.family.notifications.v1:a'),false);
     assert.equal(current.has('safewatch.barangay.notifications.v1:a'),true);
+    assert.equal(current.has('safewatch.barangay.sos-history.v1:a'),true);
     assert.equal(current.has('unrelated-preference'),true);
   }
 });
@@ -24,6 +25,7 @@ test('barangay sign-out clears its bell read state without clearing family state
   clearPrivateBrowserCache('dashboard',browser);
   for (const current of Object.values(browser)) {
     assert.equal(current.has('safewatch.barangay.notifications.v1:a'),false);
+    assert.equal(current.has('safewatch.barangay.sos-history.v1:a'),false);
     assert.equal(current.has('safewatch.family.notifications.v1:a'),true);
   }
 });
