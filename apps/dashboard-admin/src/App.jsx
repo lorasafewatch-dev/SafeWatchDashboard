@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { isCurrentGpsPoint, telemetryTimestamp } from '../../shared/gpsStatus.js';
-import { dashboardLocationAt, parseGpsPoint } from '../../shared/gpsLocation.js';
+import { parseGpsPoint } from '../../shared/gpsLocation.js';
 import MapViewport from '../../shared/components/MapViewport.jsx';
 import { ALERT_QUERY_FILTER, acknowledgeIncident, alertTitle, batteryAlertMessage, confirmationErrorMessage, groupAlertIncidents } from '../../shared/alertLifecycle.js';
 import LocationHistory from '../../shared/components/LocationHistory.jsx';
@@ -74,6 +74,7 @@ import SosResponseMap from './components/SosResponseMap.jsx';
 import { showAdminIncident } from './sosResponseMap.js';
 import { saveSeniorPhoto, prepareSeniorPhoto } from '../../shared/seniorPhotos.js';
 import { normalizeWatchId } from '../../shared/familySeniors.js';
+import { latestDashboardPacket, loadDashboardWatches } from './dashboardTelemetry.js';
 
 // Map Controller
 const MapController = ({ center, zoom, trigger, bounds }) => {
@@ -317,12 +318,6 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   const [seniorRecords, setSeniors] = useState([]);
   const [sosAlerts, setSosAlerts] = useState([]);
-  const seniors = seniorRecords.map(senior => {
-    const current = dashboardLocationAt(senior, liveTime.getTime());
-    const staffSos = sosAlerts.some(incident => incident.device_id === senior.id && incident.alert_type === 'SOS');
-    return staffSos ? { ...current, isSOS: true, type: 'sos', status: 'SOS ALERT!' } : current;
-  });
-  const viewingSenior = seniors.find(senior => senior.id === viewingSeniorId);
 
   // Registration Form States
   const [registerName, setRegisterName] = useState('');
@@ -330,101 +325,92 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [registerAge, setRegisterAge] = useState(70);
   const [registerGender, setRegisterGender] = useState('Male');
 
-  // Supabase Fetch & Realtime Sync
+  const seniors = seniorRecords.map(({ device, packet: latestTelemetry }) => {
+    const packetTime = telemetryTimestamp(latestTelemetry);
+
+    // The shared parser handles PostGIS EWKB endianness/SRID, WKT and GeoJSON.
+    let lat = null;
+    let lng = null;
+    let hasGpsLock = false;
+    if (latestTelemetry && latestTelemetry.location) {
+      const parsed = parseGpsPoint(latestTelemetry.location);
+      if (isCurrentGpsPoint(parsed, packetTime, liveTime.getTime())) {
+        hasGpsLock = true;
+        lat = parsed.lat;
+        lng = parsed.lng;
+      }
+    }
+
+    const isInSafeZone = hasGpsLock && familyZoneContains({ lat, lng }, device.family_safe_zone);
+    const isInTrustedZone = hasGpsLock && !device.family_safe_zone && trustedLocations.some(loc => {
+      const R = 6371000;
+      const dLat = (lat - loc.lat) * Math.PI / 180;
+      const dLng = (lng - loc.lng) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(loc.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLng/2)**2;
+      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return dist <= loc.radius;
+    });
+
+    let zoneStatus = 'Outside Safe Zone';
+    let zoneType = 'outside';
+    if (!hasGpsLock) {
+      zoneStatus = 'No current GPS fix';
+      zoneType = 'waiting';
+    } else if (isInSafeZone) {
+      zoneStatus = 'Inside Safe Zone';
+      zoneType = 'normal';
+    } else if (isInTrustedZone) {
+      zoneStatus = 'Trusted Location';
+      zoneType = 'trusted';
+    }
+
+    const details = device.device_name ? device.device_name.split(' (') : [];
+    const gender = device.gender?.trim() || (details[1] ? details[1].replace(')', '').replace(' [MUTED]', '').trim() : '') || 'Gender not provided';
+
+    const senior = {
+      id: device.id,
+      photo_path: device.photo_path,
+      name: device.patient_name,
+      phone: device.id,
+      age: device.age ?? (device.device_name?.split(' (')[2]?.replace(')', '').replace(' [MUTED]', '').trim() || '--'),
+      gender: gender,
+      status: zoneStatus,
+      pulse: latestTelemetry?.heart_rate ?? null,
+      spo2: latestTelemetry?.spo2 ?? null,
+      battery: latestTelemetry?.battery_percent ?? null,
+      rssi: Number.isFinite(latestTelemetry?.rssi_dbm) ? latestTelemetry.rssi_dbm : null,
+      snr: Number.isFinite(latestTelemetry?.snr_db) ? latestTelemetry.snr_db : null,
+      location: hasGpsLock ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'No current GPS fix',
+      hasGpsLock,
+      insideSafeZone: isInSafeZone,
+      safeZone: device.family_safe_zone || null,
+      insideTrustedZone: isInTrustedZone,
+      positionAt: packetTime,
+      lat: lat,
+      lng: lng,
+      time: packetTime ? new Date(packetTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A',
+      date: packetTime ? new Date(packetTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
+      isSOS: false,
+      type: zoneType
+    };
+    const staffSos = sosAlerts.some(incident => incident.device_id === senior.id && incident.alert_type === 'SOS');
+    return staffSos ? { ...senior, isSOS: true, type: 'sos', status: 'SOS ALERT!' } : senior;
+  });
+  const viewingSenior = seniors.find(senior => senior.id === viewingSeniorId);
+
   const fetchSeniors = async () => {
     const request = ++seniorFetchSequence.current;
     try {
-      const { data: devicesList, error: devError } = await supabase
-        .from('devices')
-        .select('*');
-
-      if (devError) throw devError;
-
-      const activeDevices = (devicesList || []).filter(d => d.patient_name !== '[HIDDEN]');
-
-      const seniorsWithTelemetry = await Promise.all(
-        activeDevices.map(async (device) => {
-          const { data: telList, error: telError } = await supabase
-            .from('telemetry')
-            .select('*')
-            .eq('device_id', device.id)
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-          if (telError) throw telError;
-          const latestTelemetry = telList && telList[0] ? telList[0] : null;
-          const packetTime = telemetryTimestamp(latestTelemetry);
-
-          // The shared parser handles PostGIS EWKB endianness/SRID, WKT and GeoJSON.
-          let lat = null;
-          let lng = null;
-          let hasGpsLock = false;
-          if (latestTelemetry && latestTelemetry.location) {
-            const parsed = parseGpsPoint(latestTelemetry.location);
-            if (isCurrentGpsPoint(parsed, packetTime)) {
-              hasGpsLock = true;
-              lat = parsed.lat;
-              lng = parsed.lng;
-            }
-          }
-
-          const isInSafeZone = hasGpsLock && familyZoneContains({ lat, lng }, device.family_safe_zone);
-          const isInTrustedZone = hasGpsLock && !device.family_safe_zone && trustedLocations.some(loc => {
-            const R = 6371000;
-            const dLat = (lat - loc.lat) * Math.PI / 180;
-            const dLng = (lng - loc.lng) * Math.PI / 180;
-            const a = Math.sin(dLat/2)**2 + Math.cos(loc.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLng/2)**2;
-            const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return dist <= loc.radius;
-          });
-
-          let zoneStatus = 'Outside Safe Zone';
-          let zoneType = 'outside';
-          if (!hasGpsLock) {
-            zoneStatus = 'No current GPS fix';
-            zoneType = 'waiting';
-          } else if (isInSafeZone) {
-            zoneStatus = 'Inside Safe Zone';
-            zoneType = 'normal';
-          } else if (isInTrustedZone) {
-            zoneStatus = 'Trusted Location';
-            zoneType = 'trusted';
-          }
-
-          const details = device.device_name ? device.device_name.split(' (') : [];
-          const gender = device.gender?.trim() || (details[1] ? details[1].replace(')', '').replace(' [MUTED]', '').trim() : '') || 'Gender not provided';
-
-          return {
-            id: device.id,
-            photo_path: device.photo_path,
-            name: device.patient_name,
-            phone: device.id,
-            age: device.age ?? (device.device_name?.split(' (')[2]?.replace(')', '').replace(' [MUTED]', '').trim() || '--'),
-            gender: gender,
-            status: zoneStatus,
-            pulse: latestTelemetry?.heart_rate ?? null,
-            spo2: latestTelemetry?.spo2 ?? null,
-            battery: latestTelemetry?.battery_percent ?? null,
-            rssi: Number.isFinite(latestTelemetry?.rssi_dbm) ? latestTelemetry.rssi_dbm : null,
-            snr: Number.isFinite(latestTelemetry?.snr_db) ? latestTelemetry.snr_db : null,
-            location: hasGpsLock ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'No current GPS fix',
-            hasGpsLock,
-            insideSafeZone: isInSafeZone,
-            safeZone: device.family_safe_zone || null,
-            insideTrustedZone: isInTrustedZone,
-            positionAt: packetTime,
-            lat: lat,
-            lng: lng,
-            time: packetTime ? new Date(packetTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
-            date: packetTime ? new Date(packetTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
-            isSOS: false,
-            type: zoneType
-          };
-        })
-      );
-      if (request === seniorFetchSequence.current) setSeniors(seniorsWithTelemetry);
-    } catch (e) {
-      console.error("Error fetching seniors:", e);
+      const watches = await loadDashboardWatches(supabase);
+      if (request !== seniorFetchSequence.current) return;
+      setSeniors(current => {
+        const byDevice = new globalThis.Map(current.map(record => [record.device.id, record.packet]));
+        return watches.map(({ device, packet }) => ({
+          device, packet: latestDashboardPacket(byDevice.get(device.id), packet),
+        }));
+      });
+    } catch (error) {
+      console.error('Error fetching seniors:', error);
     }
   };
 
@@ -434,7 +420,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     alertsBusy.current = false;
     sosResponsesRequest.current += 1;
     sosResponsesBusy.current = false;
-    setSeniors(current => current.filter(item => item.id !== id));
+    setSeniors(current => current.filter(item => item.device.id !== id));
     setSosAlerts(current => current.filter(item => item.deviceId !== id));
     setSosResponses(current => current.filter(item => item.device_id !== id));
     previousIncidents.current = previousIncidents.current.filter(item => item.device_id !== id);
@@ -615,6 +601,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   };
 
   useEffect(() => {
+    setSeniors([]);
     if (!isLoggedIn) {
       pendingAlertTone.current = null;
       previousIncidents.current = [];
@@ -625,6 +612,41 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       setSosResponsesError('');
       return;
     }
+    let active = true;
+    let refreshingTelemetry = false;
+    let refreshRequested = false;
+    const refreshTelemetry = async () => {
+      if (!active) return;
+      if (refreshingTelemetry) {
+        refreshRequested = true;
+        return;
+      }
+      refreshingTelemetry = true;
+      try {
+        do {
+          refreshRequested = false;
+          await fetchSeniors();
+        } while (active && refreshRequested);
+      }
+      finally { refreshingTelemetry = false; }
+    };
+    const applyTelemetry = ({ new: packet } = {}) => {
+      if (!active) return;
+      if (!packet?.device_id) return refreshTelemetry();
+      setSeniors(current => current.map(record => {
+        if (record.device.id !== packet.device_id) return record;
+        const latest = latestDashboardPacket(record.packet, packet);
+        return latest === record.packet ? record : { ...record, packet: latest };
+      }));
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshTelemetry();
+    };
+    // Keep readings current even if Realtime is delayed or reconnecting.
+    const telemetryTimer = setInterval(refreshWhenVisible, 5000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('online', refreshWhenVisible);
+
     // Check every 10 seconds so we can auto-escalate alerts that cross the 3-min threshold
     const timer = setInterval(() => {
       setLiveTime(new Date());
@@ -632,16 +654,14 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     }, 10000);
 
     // Initial fetch
-    fetchSeniors();
+    refreshTelemetry();
     fetchAlerts();
 
     // Subscribe to changes
     const telemetrySubscription = supabase
       .channel('public:telemetry')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'telemetry' }, () => {
-        fetchSeniors();
-      })
-      .subscribe();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'telemetry' }, applyTelemetry)
+      .subscribe(status => { if (status === 'SUBSCRIBED') refreshTelemetry(); });
 
     const alertsSubscription = supabase
       .channel('public:alerts')
@@ -651,13 +671,18 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       .subscribe();
 
     return () => {
+      active = false;
+      seniorFetchSequence.current += 1;
+      clearInterval(telemetryTimer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('online', refreshWhenVisible);
       alertFetchSequence.current += 1;
       alertsBusy.current = false;
       clearInterval(timer);
       supabase.removeChannel(telemetrySubscription);
       supabase.removeChannel(alertsSubscription);
     };
-  }, [isLoggedIn, userId]);
+  }, [isLoggedIn, userId, supabase]);
 
   const handleRegisterSenior = async () => {
     if (registrationLocked.current) return;
