@@ -1,6 +1,7 @@
 import { needsBarangayAttention } from '../../shared/alertLifecycle.js';
 import { isCurrentGpsPoint, isValidGpsPoint } from '../../shared/gpsStatus.js';
 import { DEFAULT_SAFE_ZONE_NAME, validateFamilySafeZone } from '../../shared/familySafeZone.js';
+import { barangaySosStage } from '../../shared/sosResponse.js';
 
 export function isPendingSos(incident, now) {
   return incident?.alert_type === 'SOS' && incident.details?.incident_open !== false
@@ -16,12 +17,15 @@ export function showAdminIncident(incident, now) {
 }
 
 export function responseMapIncidents(active, responses, selected) {
+  const candidates = [...responses, ...active, selected];
+  const arrivedIds = new Set(candidates.filter(row => barangaySosStage(row) === 'arrived').map(row => String(row.id)));
   const records = new Map();
   for (const incident of [...responses, ...active]) {
     if (incident.alert_type === 'SOS' && !(incident.details?.sos_family_first === true && !incident.details.sos_transferred_at)) records.set(String(incident.id), incident);
   }
   if (selected?.alert_type === 'SOS' && !(selected.details?.sos_family_first === true && !selected.details.sos_transferred_at) && !records.has(String(selected.id))) records.set(String(selected.id), selected);
-  return [...records.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  return [...records.values()].filter(row => !arrivedIds.has(String(row.id)))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
 export function responseMapZone(senior) {

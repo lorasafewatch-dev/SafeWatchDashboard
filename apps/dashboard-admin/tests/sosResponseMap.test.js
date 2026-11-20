@@ -21,6 +21,15 @@ test('acknowledged and historical incidents remain selectable without duplicate 
   assert.equal(records.length, 3);
   assert.equal(isPendingSos(sos), true); assert.equal(isPendingSos(acknowledged), false); assert.equal(isAcknowledgedSos(acknowledged), true);
 });
+test('arrival removes an SOS from the response map even with a stale pending row or selection', () => {
+  const pending = incident(1);
+  const onTheWay = { ...pending, details: { ...pending.details, status: 'ACKNOWLEDGED_BHW', acknowledged_at: new Date(now).toISOString() } };
+  const arrived = { ...onTheWay, details: { ...onTheWay.details, sos_arrived_at: new Date(now + 1000).toISOString() } };
+  const other = incident(2);
+  assert.deepEqual(responseMapIncidents([other], [onTheWay], onTheWay), [onTheWay, other]);
+  assert.deepEqual(responseMapIncidents([pending, other], [arrived], onTheWay), [other]);
+  assert.deepEqual(responseMapIncidents([other], [onTheWay], arrived), [other]);
+});
 test('saved SOS pin stays fixed when the watch moves, and stale fixes retain their recording time', () => {
   const sos = incident(1);
   sos.details.sos_location = { point: { lat: 14.039, lng: 121.123 }, recorded_at: '2026-11-19T09:59:58Z' };

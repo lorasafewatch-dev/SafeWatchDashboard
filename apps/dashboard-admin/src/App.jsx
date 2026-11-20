@@ -140,11 +140,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [notificationsError, setNotificationsError] = useState('');
   const [alertActionError, setAlertActionError] = useState('');
+  const [arrivalSaved, setArrivalSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [alertSearch, setAlertSearch] = useState('');
   const contentRef = React.useRef(null);
-  const navigate = page => { setActiveTab(page); setSidebarOpen(false); };
+  const navigate = page => { setActiveTab(page); setSidebarOpen(false); setArrivalSaved(false); };
   useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [activeTab]);
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -289,6 +290,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     setNotificationsLoading(true);
     setNotificationsError('');
     setAlertActionError('');
+    setArrivalSaved(false);
     stopAlertSounds();
     if (soundStorageKey) {
       try {
@@ -450,7 +452,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       const rows = await withRequestTimeout(loadSosResponses(supabase), 10000, 'SOS response updates took too long.');
       if (request !== sosResponsesRequest.current) return;
       setSosResponses(rows); setSosResponsesError('');
-      setResponseIncident(current => rows.find(row => String(row.id) === String(current?.id)) || current);
+      setResponseIncident(current => {
+        const receipt = rows.find(row => String(row.id) === String(current?.id));
+        return barangaySosStage(receipt) === 'arrived' ? null : receipt || current;
+      });
       setSelectedAlert(current => {
         if (!current || current.details?.sos_arrived_at) return current;
         const receipt = rows.find(row => String(row.id) === String(current.id));
@@ -592,6 +597,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     confirmationBusy.current = true;
     setConfirmingAlerts(true);
     setAlertActionError('');
+    setArrivalSaved(false);
     alertFetchSequence.current += 1;
     alertsBusy.current = false;
     sosResponsesRequest.current += 1;
@@ -603,15 +609,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       const updated = reportingArrival ? await markSosArrived(supabase, incident)
         : await respondToSos(supabase, incident, decision, 'barangay');
       setSosResponses(current => mergeSosResponse(current, updated));
+      commitConfirmation(incident);
       if (reportingArrival) {
-        setResponseIncident(current => String(current?.id) === String(updated.id) ? updated : current);
-        setSelectedAlert(current => String(current?.id) === String(updated.id) ? { ...current, details: updated.details } : current);
-      } else {
-        commitConfirmation(incident);
-        if (decision === 'confirmed') openResponseMap(updated);
-      }
+        setResponseIncident(current => String(current?.id) === String(updated.id) ? null : current);
+        setArrivalSaved(true);
+      } else if (decision === 'confirmed') openResponseMap(updated);
     } catch (error) {
-      setAlertActionError(reportingArrival ? 'Arrival could not be saved. Refresh the SOS and try again.' : sosResponseError(error));
+      if (!reportingArrival) setAlertActionError(sosResponseError(error));
+      else if (['PGRST202', '42883'].includes(error?.code)) setAlertActionError('Arrival reporting needs the SafeWatch database update.');
+      else setAlertActionError('Arrival could not be saved. Refresh the SOS and try again.');
     }
     finally {
       confirmationBusy.current = false;
@@ -1286,9 +1292,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         </header>
         <div ref={contentRef} className="admin-content" data-page={activeTab}>
           {alertActionError && !selectedAlert && <p role="alert" className="bg-red-50 text-red-700 rounded-xl p-4 mb-4">{alertActionError}</p>}
+          {arrivalSaved && <p role="status" className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">Arrival saved. The SOS was removed from the response list.</p>}
           {seniorMessage && <p role="status" className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{seniorMessage}</p>}
           {renderContent()}
-          {activeTab === 'SOS Alerts' && <><SosResponseUpdates responses={sosResponses} error={sosResponsesError} onRetry={fetchSosResponseUpdates} onDetails={openAlertDetails}/><ActivityHistory key={userId} client={supabase} seniors={seniors} onDetails={openAlertDetails}/></>}
+          {activeTab === 'SOS Alerts' && <><SosResponseUpdates responses={sosResponses.filter(incident => barangaySosStage(incident) !== 'arrived')} error={sosResponsesError} onRetry={fetchSosResponseUpdates} onDetails={openAlertDetails}/><ActivityHistory key={userId} client={supabase} seniors={seniors} onDetails={openAlertDetails}/></>}
         </div>
       </main>
 
