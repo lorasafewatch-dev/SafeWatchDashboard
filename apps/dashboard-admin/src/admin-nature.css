@@ -104,7 +104,7 @@
 .admin-map-legend > span { display: flex; align-items: center; gap: 5px; }
 .admin-map-legend i { width: 7px; height: 7px; border-radius: 50%; background: #00a77b; }
 .admin-map-legend .admin-map-legend__outside { background: #e45748; }
-.admin-map-legend .admin-map-legend__trusted { background: #438fad; }
+.admin-map-legend .admin-map-legend__trusted { width: 10px; height: 10px; border: 1px dashed currentColor; background: transparent; }
 .admin-overview__map-canvas .admin-zone-label { display: none; }
 .admin-overview__alerts { display: flex; flex-direction: column; min-width: 0; height: 366px; overflow: hidden; }
 .admin-count { display: inline-grid; place-items: center; min-width: 23px; height: 23px; padding: 0 6px; border-radius: 50%; color: #357f68; background: #e1f2e8; font-size: 12px; font-weight: 500; }

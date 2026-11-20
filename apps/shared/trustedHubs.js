@@ -5,6 +5,35 @@ import { withRequestTimeout } from './requestTimeout.js';
 export const MIN_LOCATION_RADIUS = 10;
 export const MAX_LOCATION_RADIUS = 5000;
 
+const installedWatchStyles = new Map([
+  ['00000000-0000-0000-0000-a0f262e10c18', { color: '#c2540a', dashArray: '7 5' }],
+  ['00000000-0000-0000-0000-a0f262e10c94', { color: '#175fce', dashArray: '3 5' }],
+]);
+const additionalWatchColors = ['#7e3db2', '#b52170', '#087c78', '#8c6600', '#6b4b36', '#5455a5', '#54742e'];
+const watchOutlines = ['7 5', '3 5', '12 5', '12 4 3 4'];
+
+export function safeLocationAppearance(watchId) {
+  if (!watchId) return { color: '#64748b', dashArray: '2 5' };
+  const id = watchId.toLowerCase();
+  const installedStyle = installedWatchStyles.get(id);
+  if (installedStyle) return installedStyle;
+
+  // Use the immutable Watch ID so account visibility and sorting cannot change its style.
+  let hash = 2166136261;
+  for (const character of id) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  const index = hash >>> 0;
+  return {
+    color: additionalWatchColors[index % additionalWatchColors.length],
+    dashArray: watchOutlines[Math.floor(index / additionalWatchColors.length) % watchOutlines.length],
+  };
+}
+
+export function safeLocationAssignment(watchId, seniorName) {
+  if (!watchId) return 'All watches';
+  const watch = `Watch ${watchId.slice(-4).toUpperCase()}`;
+  return seniorName ? `${seniorName} · ${watch}` : watch;
+}
+
 export function safeLocationsForWatch(locations, watchId) {
   return locations.filter(location => !location.device_id || location.device_id === watchId);
 }

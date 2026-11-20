@@ -11,10 +11,10 @@ import { withRequestTimeout } from '../../shared/requestTimeout.js';
 import { enableAlertSounds, playAlertSound, stopAlertSounds } from '../../shared/alertSound.js';
 import { SAN_ISIDRO_EAST_BOUNDARY } from '../../shared/safeZone.js';
 import { familyZoneBounds, familyZoneContains } from '../../shared/familySafeZone.js';
-import { MAX_LOCATION_RADIUS, MIN_LOCATION_RADIUS, safeLocationAt, safeLocationError, safeLocationsForWatch, saveSafeLocation } from '../../shared/trustedHubs.js';
+import { MAX_LOCATION_RADIUS, MIN_LOCATION_RADIUS, safeLocationAppearance, safeLocationAssignment, safeLocationAt, safeLocationError, safeLocationsForWatch, saveSafeLocation } from '../../shared/trustedHubs.js';
 import TrustedHubLayers from '../../shared/components/TrustedHubLayers.jsx';
 import useTrustedHubs from '../../shared/components/useTrustedHubs.js';
-import { Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
+import { Marker, Popup, useMap, Polygon, Circle, CircleMarker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { createSeniorMarker } from '../../shared/mapMarker.js';
@@ -754,7 +754,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         onNavigate={navigate} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} onDecline={incident => handleSosResponse(incident, 'declined')} confirming={confirmingAlerts}
         onLocate={senior => { setSelectedSeniorLoc([senior.lat, senior.lng]); navigate('Live Location'); }}>
         <MapViewport label="Dashboard live location map" className="h-full" bounds={sanIsidroEastGeofence}
-          legend={<div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Safe location</span></div>}>
+          legend={<div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Safe locations by watch</span></div>}>
           <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
           <TrustedHubLayers hubs={mapLocations}/>
           {seniors.filter(senior => senior.hasGpsLock).map(senior => <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)}>
@@ -1103,7 +1103,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     } else if (activeTab === 'Geofence Zones') {
       const search = zoneSearch.trim().toLowerCase();
       const mainZoneMatches = 'san isidro east'.includes(search);
-      const filteredHubs = mapLocations.filter(loc => `${loc.name} ${loc.seniorName ?? ''}`.toLowerCase().includes(search));
+      const filteredHubs = mapLocations.filter(loc => `${loc.name} ${safeLocationAssignment(loc.device_id, loc.seniorName)}`.toLowerCase().includes(search));
       const focusZone = zone => { setGeofenceCenter(zone); setGeofenceCenterTrigger(value => value + 1); };
       return (
         <div className="admin-page admin-zones">
@@ -1166,12 +1166,12 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     className="p-4 rounded-3xl border border-slate-100 bg-white flex items-center gap-2 group hover:border-blue-200 transition-all shadow-sm"
                   >
                     <button type="button" onClick={() => focusZone(loc)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
-                      <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500">
-                        <MapPin className="w-6 h-6" />
+                      <div className="w-12 h-12 shrink-0 bg-slate-50 rounded-2xl flex items-center justify-center" style={{ color: safeLocationAppearance(loc.device_id).color }}>
+                        <MapPin className="w-6 h-6" aria-hidden="true" />
                       </div>
                       <div className="min-w-0 break-words">
                         <p className="font-bold text-slate-800">{loc.name}</p>
-                        <p className="text-xs text-slate-500">{loc.seniorName || (loc.device_id ? 'Assigned watch' : 'Shared location')} · {loc.radius} m radius</p>
+                        <p className="text-xs text-slate-500">{safeLocationAssignment(loc.device_id, loc.seniorName)} · {loc.radius.toLocaleString()} m radius</p>
                       </div>
                     </button>
                     <button type="button" disabled={hubBusy} onClick={() => { setNewLocation(loc); setHubActionError(''); setIsAddingLocationDetails(true); }} aria-label={`Edit safe location ${loc.name}`}
@@ -1208,12 +1208,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 {/* Show current picking preview */}
                 {(isPickingLocation || isAddingLocationDetails) && newLocation.lat && newLocation.lng && (
                   <>
-                    <Marker position={[Number(newLocation.lat), Number(newLocation.lng)]} icon={createCustomIcon('', 'trusted')} />
                     <Circle
                       center={[Number(newLocation.lat), Number(newLocation.lng)]}
                       radius={Math.max(MIN_LOCATION_RADIUS, Math.min(MAX_LOCATION_RADIUS, Number(newLocation.radius) || 0))}
-                      pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.2 }}
+                      pathOptions={{ ...safeLocationAppearance(newLocation.device_id), fillOpacity: .2, interactive: false }}
                     />
+                    <CircleMarker center={[Number(newLocation.lat), Number(newLocation.lng)]} radius={6}
+                      pathOptions={{ color: '#fff', fillColor: safeLocationAppearance(newLocation.device_id).color, fillOpacity: 1, weight: 2, interactive: false }}/>
                   </>
                 )}
               </MapViewport>
@@ -1391,10 +1392,16 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 />
               </div>
 
-              <div className="space-y-1 text-sm font-semibold"><label htmlFor="safe-location-watch">Assign to</label><select id="safe-location-watch" disabled={hubBusy || !!newLocation.revision} value={newLocation.device_id === null ? 'all' : newLocation.device_id ?? ''}
-                onChange={event => setNewLocation({ ...newLocation, device_id: event.target.value === 'all' ? null : event.target.value })} className="block w-full rounded-lg border border-slate-200 p-2">
-                <option value="" disabled>Choose assignment</option><option value="all">All watches</option>{seniors.map(senior => <option key={senior.id} value={senior.id}>{senior.name} · {senior.id.slice(-4)}</option>)}
-              </select></div>
+              <div className="space-y-1 text-sm font-semibold">
+                <label htmlFor="safe-location-watch">Assign to</label>
+                <div className="flex items-center gap-2">
+                  {newLocation.device_id !== undefined && <MapPin className="w-5 h-5 shrink-0" aria-hidden="true" style={{ color: safeLocationAppearance(newLocation.device_id).color }}/>}
+                  <select id="safe-location-watch" disabled={hubBusy || !!newLocation.revision} value={newLocation.device_id === null ? 'all' : newLocation.device_id ?? ''}
+                    onChange={event => setNewLocation({ ...newLocation, device_id: event.target.value === 'all' ? null : event.target.value })} className="block w-full min-w-0 rounded-lg border border-slate-200 p-2">
+                    <option value="" disabled>Choose assignment</option><option value="all">All watches</option>{seniors.map(senior => <option key={senior.id} value={senior.id}>{safeLocationAssignment(senior.id, senior.name)}</option>)}
+                  </select>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="min-w-0 text-sm font-semibold">Latitude<input type="number" step="any" value={newLocation.lat} disabled={hubBusy} onChange={event => setNewLocation({ ...newLocation, lat: event.target.value })} className="block w-full rounded-lg border border-slate-200 p-2"/></label>
                 <label className="min-w-0 text-sm font-semibold">Longitude<input type="number" step="any" value={newLocation.lng} disabled={hubBusy} onChange={event => setNewLocation({ ...newLocation, lng: event.target.value })} className="block w-full rounded-lg border border-slate-200 p-2"/></label>

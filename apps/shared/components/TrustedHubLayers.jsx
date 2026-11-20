@@ -1,9 +1,8 @@
 import { Circle, Popup } from 'react-leaflet';
+import { safeLocationAppearance, safeLocationAssignment } from '../trustedHubs.js';
 
-const hubStyle = { color: '#2b77a1', fillOpacity: .15, weight: 2, dashArray: '5 8' };
-
-export default function TrustedHubLayers({ hubs = [] }) {
-  return hubs.map(hub => <Circle key={hub.id} center={[hub.lat, hub.lng]} radius={hub.radius} className="watch-trusted-hub" pathOptions={hubStyle}>
-    <Popup>{hub.name} · {hub.seniorName || (hub.device_id ? 'Assigned watch' : 'Shared location')} · {hub.radius.toLocaleString()} m radius</Popup>
+export default function TrustedHubLayers({ hubs = [], seniorName }) {
+  return hubs.map(hub => <Circle key={hub.id} center={[hub.lat, hub.lng]} radius={hub.radius} className="watch-trusted-hub" pathOptions={{ ...safeLocationAppearance(hub.device_id), fillOpacity: .17, weight: 3 }}>
+    <Popup><strong>{hub.name}</strong><br/>{safeLocationAssignment(hub.device_id, hub.seniorName ?? seniorName)}<br/>{hub.radius.toLocaleString()} m radius</Popup>
   </Circle>);
 }
