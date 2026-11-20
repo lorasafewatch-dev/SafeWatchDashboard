@@ -6,6 +6,8 @@ export function barangaySosStage(incident) {
   if (incident?.alert_type !== 'SOS' || incident.details?.status !== 'ACKNOWLEDGED_BHW') return null;
   const details = incident.details;
   if (details.sos_arrived_at) return 'arrived';
+  // A closed legacy confirmation has no handoff receipt. A transferred SOS can remain in progress after the watch signal clears.
+  if (details.resolved_at || (details.incident_open === false && !details.sos_transferred_at)) return null;
   return details.sos_responses?.barangay?.at || details.acknowledged_at || details.sos_response_at ? 'on_the_way' : null;
 }
 

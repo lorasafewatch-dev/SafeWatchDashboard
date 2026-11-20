@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { groupAlertIncidents, needsBarangayAttention, planAlertSounds } from './alertLifecycle.js';
-import { isFamilyActionable, loadSosResponses, markSosArrived, mergeSosResponse, respondToSos, sosResponseState } from './sosResponse.js';
+import { barangaySosStage, isFamilyActionable, loadSosResponses, markSosArrived, mergeSosResponse, respondToSos, sosResponseState } from './sosResponse.js';
 
 const now = Date.parse('2026-11-03T04:00:00Z');
 const row = (details = {}) => ({ id: 1, device_id: 'watch-a', alert_type: 'SOS', created_at: new Date(now).toISOString(),
@@ -68,6 +68,18 @@ test('confirmation indicators retain who confirmed and both sides decisions acro
   assert.equal(state.responses.barangay.decision, 'confirmed');
   assert.equal(state.message, 'Barangay personnel are on the way');
   assert.match(sosResponseState(row({ status: 'ACKNOWLEDGED_FAMILY' })).message, /Family confirmed/);
+});
+
+test('closed legacy acknowledgments stay historical while a transferred response can await arrival with the watch signal off', () => {
+  const at = new Date(now).toISOString();
+  const closed = row({ status: 'ACKNOWLEDGED_BHW', incident_open: false, acknowledged_at: at,
+    sos_response_at: at, sos_responses: { barangay: { decision: 'confirmed', at } } });
+  assert.equal(barangaySosStage(closed), null);
+  assert.equal(sosResponseState(closed).message, 'Barangay secretary confirmed the response');
+  const transferred = { ...closed, details: { ...closed.details, sos_transferred_at: at } };
+  assert.equal(barangaySosStage(transferred), 'on_the_way');
+  assert.equal(barangaySosStage({ ...transferred, details: { ...transferred.details, resolved_at: at } }), null);
+  assert.equal(barangaySosStage({ ...closed, details: { ...closed.details, sos_arrived_at: at } }), 'arrived');
 });
 
 test('arrival requires a saved receipt on the accepted SOS', async () => {

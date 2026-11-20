@@ -33,8 +33,10 @@ test('arrival removes an SOS from the response map even with a stale pending row
 test('the history tab clears completely while pending responses and personnel on the way stay active', () => {
   const familyConfirmed = incident(1, 'ACKNOWLEDGED_FAMILY');
   const oldConfirmation = incident(2, 'ACKNOWLEDGED_BHW');
-  const onTheWay = { ...oldConfirmation, details: { ...oldConfirmation.details, incident_open: false, acknowledged_at: new Date(now).toISOString() } };
-  const responding = { ...onTheWay, id: 6, created_at: '2026-11-19T09:00:00Z' };
+  const at = new Date(now).toISOString();
+  Object.assign(oldConfirmation.details, { incident_open: false, acknowledged_at: at, sos_response_at: at });
+  const responding = { ...oldConfirmation, id: 6, created_at: '2026-11-19T09:00:00Z',
+    details: { ...oldConfirmation.details, sos_transferred_at: at } };
   const awaitingFamily = { ...incident(3), details: { status: 'PENDING_FAMILY', sos_assigned_to: 'family' } };
   const pending = incident(4, 'ESCALATED_BHW');
   const resolved = incident(5, 'RESOLVED');
