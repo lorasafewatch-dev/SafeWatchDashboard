@@ -4,6 +4,6 @@ const hubStyle = { color: '#2b77a1', fillOpacity: .15, weight: 2, dashArray: '5 
 
 export default function TrustedHubLayers({ hubs = [] }) {
   return hubs.map(hub => <Circle key={hub.id} center={[hub.lat, hub.lng]} radius={hub.radius} className="watch-trusted-hub" pathOptions={hubStyle}>
-    <Popup>{hub.name} · Shared safe hub · {hub.radius} m radius · Default boundary coverage</Popup>
+    <Popup>{hub.name} · {hub.seniorName || (hub.device_id ? 'Assigned watch' : 'Shared location')} · {hub.radius.toLocaleString()} m radius</Popup>
   </Circle>);
 }

@@ -17,7 +17,7 @@ export default function useTrustedHubs(client, userId) {
       if (current.current === scope && scope.version === version) setState({ scope, hubs, error: '' });
     } catch {
       if (current.current === scope && scope.version === version) {
-        setState(previous => ({ scope, hubs: previous?.scope === scope ? previous.hubs : empty, error: 'Shared safe hubs could not be refreshed.' }));
+        setState(previous => ({ scope, hubs: previous?.scope === scope ? previous.hubs : empty, error: 'Saved safe locations could not be refreshed.' }));
       }
     } finally {
       scope.pending = false;

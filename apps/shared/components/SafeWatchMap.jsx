@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { EMPTY_MAP_TILE, MAP_LAYERS } from '../mapTiles.js';
+import { mapTileSources } from '../mapTiles.js';
 
 function MapSizeSync() {
   const map = useMap();
@@ -34,33 +34,56 @@ export function SafeWatchTiles({ variant = 'standard' }) {
 }
 
 function MapBackground({ variant }) {
-  const provider = MAP_LAYERS[variant] || MAP_LAYERS.standard;
-  const layer = useRef(null);
-  const failedInBatch = useRef(false);
+  const sources = mapTileSources(variant);
+  const [attempt, setAttempt] = useState({ source: 0, revision: 0 });
   const [unavailable, setUnavailable] = useState(false);
-  const events = useMemo(() => ({
-    loading: () => { failedInBatch.current = false; },
-    tileerror: () => { failedInBatch.current = true; setUnavailable(true); },
-    load: () => setUnavailable(failedInBatch.current),
-  }), []);
+  const lastSource = sources.length - 1;
+  const onFailure = useCallback((hasTiles = false) => {
+    if (attempt.source < lastSource) {
+      setAttempt(current => current === attempt ? { ...current, source: current.source + 1 } : current);
+    } else if (!hasTiles) setUnavailable(true);
+  }, [attempt, lastSource]);
+  const onAvailable = useCallback(() => setUnavailable(false), []);
+  const retry = useCallback(() => {
+    setUnavailable(false);
+    setAttempt(current => ({ source: 0, revision: current.revision + 1 }));
+  }, []);
+  useEffect(() => {
+    if (!unavailable) return;
+    window.addEventListener('online', retry);
+    return () => window.removeEventListener('online', retry);
+  }, [retry, unavailable]);
   return <>
-    {/* OSM receives the public origin, never an account path or query. */}
-    <TileLayer ref={layer} url={provider.url} attribution={provider.attribution}
-      referrerPolicy="origin" maxNativeZoom={provider.maxNativeZoom} maxZoom={20}
-      noWrap updateWhenIdle keepBuffer={1} errorTileUrl={EMPTY_MAP_TILE} eventHandlers={events} />
-    {unavailable && <MapNotice onRetry={() => {
-      failedInBatch.current = false;
-      setUnavailable(false);
-      layer.current?.redraw();
-    }} />}
+    <RasterTiles key={`${attempt.revision}:${attempt.source}`} provider={sources[attempt.source]} onFailure={onFailure} onAvailable={onAvailable}/>
+    {(unavailable || variant === 'satellite' && attempt.source > 0) && <MapNotice unavailable={unavailable} onRetry={retry}/>}
   </>;
 }
 
-function MapNotice({ onRetry }) {
+function RasterTiles({ provider, onFailure, onAvailable }) {
+  const loaded = useRef(false);
+  const failures = useRef(0);
+  const timer = useRef(null);
+  const startDeadline = useCallback(() => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => { if (!loaded.current) onFailure(); }, 7000);
+  }, [onFailure]);
+  useEffect(() => { startDeadline(); return () => clearTimeout(timer.current); }, [startDeadline]);
+  const events = useMemo(() => ({
+    loading: () => { loaded.current = false; failures.current = 0; startDeadline(); },
+    tileload: () => { loaded.current = true; onAvailable(); },
+    tileerror: () => { failures.current += 1; },
+    load: () => { clearTimeout(timer.current); if (failures.current) onFailure(loaded.current); },
+  }), [onAvailable, onFailure, startDeadline]);
+  // Send the public origin with tile requests without exposing page paths.
+  return <TileLayer url={provider.url} attribution={provider.attribution} referrerPolicy="origin"
+    maxNativeZoom={provider.maxNativeZoom} maxZoom={20} noWrap updateWhenIdle keepBuffer={1} eventHandlers={events}/>;
+}
+
+function MapNotice({ unavailable, onRetry }) {
   const container = useRef(null);
   useEffect(() => { L.DomEvent.disableClickPropagation(container.current); L.DomEvent.disableScrollPropagation(container.current); }, []);
-  return <div ref={container} role="status" className="absolute bottom-20 left-4 right-4 z-[1000] max-w-sm rounded-xl border border-amber-200 bg-white/95 px-4 py-3 shadow text-xs text-amber-900">
-    <p>Map background unavailable. Check your connection and try again. Location markers may still be shown.</p>
-    <button type="button" onClick={onRetry} className="mt-2 font-bold underline">Retry map</button>
+  return <div ref={container} role="status" className="absolute bottom-9 left-2 z-[1000] flex max-w-[calc(100%-1rem)] flex-wrap items-center gap-x-2 rounded-md bg-white/95 px-2 py-1 text-xs text-slate-700 shadow">
+    <span>{unavailable ? 'Map tiles could not load.' : 'Showing the street map.'}</span>
+    <button type="button" onClick={onRetry} className="font-bold underline">{unavailable ? 'Retry map' : 'Retry satellite'}</button>
   </div>;
 }
