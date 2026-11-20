@@ -10,7 +10,10 @@ import { loadSosResponses, mergeSosResponse, respondToSos, sosResponseError, sos
 import { withRequestTimeout } from '../../shared/requestTimeout.js';
 import { enableAlertSounds, playAlertSound, stopAlertSounds } from '../../shared/alertSound.js';
 import { SAN_ISIDRO_EAST_BOUNDARY } from '../../shared/safeZone.js';
-import { familyZoneContains } from '../../shared/familySafeZone.js';
+import { familyZoneBounds, familyZoneContains } from '../../shared/familySafeZone.js';
+import { addTrustedHub, removeTrustedHub, trustedHubAt } from '../../shared/trustedHubs.js';
+import TrustedHubLayers from '../../shared/components/TrustedHubLayers.jsx';
+import useTrustedHubs from '../../shared/components/useTrustedHubs.js';
 import { Marker, Popup, useMap, Polygon, Circle, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -127,9 +130,17 @@ const PolygonWithLegend = ({ positions, name }) => (
   </>
 );
 
+function FamilyZoneLayers({ zones }) {
+  return zones.map(zone => <Circle key={zone.id} center={[zone.lat, zone.lng]} radius={zone.radius} className="watch-family-zone"
+    pathOptions={{ color: '#009a70', fillOpacity: .12, weight: 2 }}>
+    <Popup>{zone.seniorName}: {zone.name} · Family safe zone</Popup>
+  </Circle>);
+}
+
 function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const supabase = client || getDashboardClient();
   const { isLoggedIn, isLoadingAuth, userId, accountUser, accountPermission, pendingAccess, accessDenied, recoveryAccess, recoveryLink, authLinkError, authNotice, setAuthNotice, authError, retryAuth, privacyRequired, privacyError } = useAccountSession(supabase, 'dashboard');
+  const { hubs: trustedLocations, error: trustedHubsError, applySavedHub, refresh: refreshTrustedHubs } = useTrustedHubs(supabase, isLoggedIn ? userId : null);
   const [confirmingAlerts, setConfirmingAlerts] = useState(false);
   const [sosResponses, setSosResponses] = useState([]);
   const [sosResponsesError, setSosResponsesError] = useState('');
@@ -295,25 +306,33 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   const timeStr = liveTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Manila' });
 
-  const [trustedLocations, setTrustedLocations] = useState([
-    { id: 1, name: "Relative's House", lat: 14.044, lng: 121.132, radius: 100, label: "Trusted Zone" }
-  ]);
-
-  const handleSaveLocation = () => {
-    if (!newLocation.name || !newLocation.lat) return;
-
-    const newHub = {
-      id: Date.now(),
-      name: newLocation.name,
-      lat: parseFloat(newLocation.lat),
-      lng: parseFloat(newLocation.lng),
-      radius: newLocation.radius,
-      label: "Trusted Zone"
-    };
-
-    setTrustedLocations([...trustedLocations, newHub]);
-    setIsAddingLocationDetails(false);
-    setNewLocation({ name: '', lat: '', lng: '', radius: 30 });
+  const [hubBusy, setHubBusy] = useState(false);
+  const [hubActionError, setHubActionError] = useState('');
+  const hubBusyRef = React.useRef(false);
+  const changeHub = async (removeId = null) => {
+    if (hubBusyRef.current) return;
+    hubBusyRef.current = true;
+    setHubBusy(true);
+    setHubActionError('');
+    try {
+      if (removeId) {
+        await removeTrustedHub(supabase, removeId);
+        applySavedHub(removeId, null);
+      } else {
+        const hub = await addTrustedHub(supabase, newLocation);
+        applySavedHub(hub.id, hub);
+        setIsAddingLocationDetails(false);
+        setGeofenceCenter([hub.lat, hub.lng]);
+        setGeofenceCenterTrigger(value => value + 1);
+        setNewLocation({ name: '', lat: '', lng: '', radius: 30 });
+      }
+    } catch (error) {
+      setHubActionError(error.message || 'The safe hub could not be saved. Please retry.');
+      refreshTrustedHubs();
+    } finally {
+      hubBusyRef.current = false;
+      setHubBusy(false);
+    }
   };
 
   const [seniorRecords, setSeniors] = useState([]);
@@ -342,14 +361,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     }
 
     const isInSafeZone = hasGpsLock && familyZoneContains({ lat, lng }, device.family_safe_zone);
-    const isInTrustedZone = hasGpsLock && !device.family_safe_zone && trustedLocations.some(loc => {
-      const R = 6371000;
-      const dLat = (lat - loc.lat) * Math.PI / 180;
-      const dLng = (lng - loc.lng) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(loc.lat*Math.PI/180)*Math.cos(lat*Math.PI/180)*Math.sin(dLng/2)**2;
-      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return dist <= loc.radius;
-    });
+    const isInTrustedZone = hasGpsLock && !!trustedHubAt({ lat, lng }, device.family_safe_zone, trustedLocations);
 
     let zoneStatus = 'Outside Safe Zone';
     let zoneType = 'outside';
@@ -705,6 +717,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   };
 
   const sanIsidroEastGeofence = SAN_ISIDRO_EAST_BOUNDARY;
+  const familyZones = seniors.flatMap(senior => senior.safeZone ? [{ ...senior.safeZone, id: senior.id, seniorName: senior.name }] : []);
+  const coverageBounds = [...sanIsidroEastGeofence, ...familyZones.flatMap(familyZoneBounds), ...trustedLocations.flatMap(familyZoneBounds)];
 
   if (isLoadingAuth) {
     return <div className="min-h-screen flex items-center justify-center bg-[#f0f4ec]"><RefreshCw className="w-8 h-8 animate-spin text-emerald-600" aria-label="Checking login" /></div>;
@@ -729,7 +743,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
   const renderContent = () => {
     const visibleAlerts = sosAlerts.filter(a => !dismissedAlerts.has(a.id));
     const totalSeniors = seniors.length.toString();
-    const safeSeniorsCount = seniors.filter(s => s.hasGpsLock && s.insideSafeZone).length.toString().padStart(2, '0');
+    const safeSeniorsCount = seniors.filter(s => s.hasGpsLock && (s.insideSafeZone || s.insideTrustedZone)).length.toString().padStart(2, '0');
     const outsideSeniorsCount = seniors.filter(s => s.hasGpsLock && !s.insideSafeZone && !s.insideTrustedZone).length;
     const activeAlertsCount = visibleAlerts.length.toString().padStart(2, '0');
 
@@ -744,11 +758,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       return <AdminOverview seniors={seniors} alerts={visibleAlerts} now={liveTime.getTime()}
         onNavigate={navigate} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} onDecline={incident => handleSosResponse(incident, 'declined')} confirming={confirmingAlerts}
         onLocate={senior => { setSelectedSeniorLoc([senior.lat, senior.lng]); navigate('Live Location'); }}>
-        <MapViewport label="Dashboard live location map" className="h-full" bounds={sanIsidroEastGeofence}
+        <MapViewport label="Dashboard live location map" className="h-full" bounds={coverageBounds}
           legend={<div className="admin-map-legend"><span><i />Inside zone</span><span><i className="admin-map-legend__outside" />Outside zone</span><span><i className="admin-map-legend__trusted" />Trusted hub</span></div>}>
           <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
-          {seniors.filter(senior => senior.safeZone).map(senior => <Circle key={`family-zone-${senior.id}`} center={[senior.safeZone.lat, senior.safeZone.lng]} radius={senior.safeZone.radius} pathOptions={{ color: '#009a70', fillOpacity: .12, weight: 2 }}><Popup>{senior.name}: {senior.safeZone.name} · Family safe zone</Popup></Circle>)}
-          {trustedLocations.map(loc => <Circle key={loc.id} center={[loc.lat, loc.lng]} radius={loc.radius} pathOptions={{ color: '#3492b0', fillColor: '#3492b0', fillOpacity: 0.1, weight: 2, dashArray: '5, 10' }} />)}
+          <FamilyZoneLayers zones={familyZones}/>
+          <TrustedHubLayers hubs={trustedLocations}/>
           {seniors.filter(senior => senior.hasGpsLock).map(senior => <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)}>
             <Popup><strong>{senior.name}</strong><br/>{senior.status}<br/>Updated {watchUpdate(senior, liveTime.getTime()).label}</Popup>
           </Marker>)}
@@ -927,7 +941,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
           {/* Map Container */}
           <div className="flex-1 relative rounded-[2.5rem] overflow-hidden border border-white shadow-[0_8px_30px_rgb(0,0,0,0.06)] bg-slate-100 z-0">
-            <MapViewport label="Live Location map" className="h-full" bounds={sanIsidroEastGeofence}>
+            <MapViewport label="Live Location map" className="h-full" bounds={coverageBounds}>
               <MapController center={selectedSeniorLoc} zoom={18} />
               {seniors.filter(senior => senior.hasGpsLock).map(senior => (
                 <Marker key={senior.id} position={[senior.lat, senior.lng]} icon={createCustomIcon(senior.name, senior.type)}>
@@ -946,7 +960,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </Marker>
               ))}
               <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
-              {seniors.filter(senior => senior.safeZone).map(senior => <Circle key={`family-zone-${senior.id}`} center={[senior.safeZone.lat, senior.safeZone.lng]} radius={senior.safeZone.radius} pathOptions={{ color: '#009a70', fillOpacity: .12, weight: 2 }}><Popup>{senior.name}: {senior.safeZone.name} · Family safe zone</Popup></Circle>)}
+              <FamilyZoneLayers zones={familyZones}/>
+              <TrustedHubLayers hubs={trustedLocations}/>
             </MapViewport>
 
           </div>
@@ -1018,7 +1033,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       return (
         <div className="admin-page admin-alerts">
           <div className="admin-alert-intro"><p>Confirm a response, or decline an SOS to notify the family.</p><button data-confirm-alert disabled={confirmingAlerts || !visibleAlerts.length} onClick={handleDismissAllDB} className="btn-outline">Confirm all responses</button></div>
-          <SosResponseMap client={supabase} seniors={seniors} active={sosAlerts} responses={sosResponses} selected={responseIncident} onSelect={setResponseIncident} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} busy={confirmingAlerts} now={liveTime.getTime()}/>
+          <SosResponseMap client={supabase} seniors={seniors} active={sosAlerts} responses={sosResponses} selected={responseIncident} onSelect={setResponseIncident} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} busy={confirmingAlerts} now={liveTime.getTime()} trustedHubs={trustedLocations}/>
           {/* Alert Summary Card */}
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6 w-fit">
             <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
@@ -1093,13 +1108,16 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
         </div>
       );
     } else if (activeTab === 'Geofence Zones') {
-      const mainZoneMatches = 'San Isidro East'.toLowerCase().includes(zoneSearch.trim().toLowerCase());
-      const filteredHubs = trustedLocations.filter(loc => loc.name.toLowerCase().includes(zoneSearch.trim().toLowerCase()));
+      const search = zoneSearch.trim().toLowerCase();
+      const mainZoneMatches = 'san isidro east'.includes(search);
+      const filteredHubs = trustedLocations.filter(loc => loc.name.toLowerCase().includes(search));
+      const filteredFamilyZones = familyZones.filter(zone => `${zone.name} ${zone.seniorName}`.toLowerCase().includes(search));
+      const focusZone = zone => { setGeofenceCenter([zone.lat, zone.lng]); setGeofenceCenterTrigger(value => value + 1); };
       return (
         <div className="admin-page admin-zones">
           {/* Stats Grid */}
           <div className="grid grid-cols-4 gap-6">
-            <StatCard icon={MapPin} value="1" label="Geofencing Zone" subtext="Currently in use" color="text-emerald-600" iconBg="bg-emerald-100" signal={100} />
+            <StatCard icon={MapPin} value={1 + trustedLocations.length + familyZones.length} label="Geofencing Zones" subtext="Currently in use" color="text-emerald-600" iconBg="bg-emerald-100" signal={100} />
             <StatCard icon={Users} value={totalSeniors} label="Seniors Assigned" subtext="Across the zone" color="text-blue-600" iconBg="bg-blue-100" signal={parseInt(totalSeniors) > 0 ? 100 : 0} />
             <StatCard icon={Bell} value={activeAlertsCount} label="Active Alerts" subtext="Outside safe zone" color="text-orange-600" iconBg="bg-orange-100" signal={activeAlertsCount === "00" ? 100 : Math.max(0, 100 - (parseInt(activeAlertsCount) * 20))} />
             <StatCard icon={Clock} value={outsideSeniorsCount} label="Outside Safe Areas" subtext="With a current GPS fix" color="text-purple-600" iconBg="bg-purple-100" signal={seniors.length ? outsideSeniorsCount / seniors.length * 100 : 0} />
@@ -1110,9 +1128,10 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <div className="p-6 border-b border-slate-50">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-bold text-slate-800">Active Zones</h3>
-                  <button
+                  <button type="button" disabled={hubBusy || isPickingLocation || isAddingLocationDetails}
                     onClick={() => {
-                      setNewLocation({ name: '', lat: '', lng: '', radius: 30 });
+                      setNewLocation({ id: globalThis.crypto.randomUUID(), name: '', lat: '', lng: '', radius: 30 });
+                      setHubActionError('');
                       setIsPickingLocation(true);
                     }}
                     className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all flex items-center gap-2 text-[10px] font-black uppercase"
@@ -1120,6 +1139,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                     <Plus className="w-3 h-3" /> Add Safe Hub
                   </button>
                 </div>
+                {(trustedHubsError || hubActionError && !isAddingLocationDetails) && <p role="alert" className="mt-2 text-sm text-red-700">{hubActionError || trustedHubsError}</p>}
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input aria-label="Search map zones" value={zoneSearch} onChange={event => setZoneSearch(event.target.value)} type="text" placeholder="Search zone..." className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none" />
@@ -1151,39 +1171,34 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 {filteredHubs.map(loc => (
                   <div
                     key={loc.id}
-                    onClick={() => { setGeofenceCenter([loc.lat, loc.lng]); setGeofenceCenterTrigger(prev => prev + 1); }}
-                    className="p-5 rounded-3xl border border-slate-100 bg-white flex items-center justify-between cursor-pointer group hover:border-blue-200 transition-all shadow-sm"
+                    className="p-4 rounded-3xl border border-slate-100 bg-white flex items-center gap-2 group hover:border-blue-200 transition-all shadow-sm"
                   >
-                    <div className="flex items-center gap-4">
+                    <button type="button" onClick={() => focusZone(loc)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
                       <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500">
                         <MapPin className="w-6 h-6" />
                       </div>
-                      <div>
+                      <div className="min-w-0 break-words">
                         <p className="font-bold text-slate-800">{loc.name}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Radius: {loc.radius}m</p>
+                        <p className="text-xs text-slate-500">Shared hub · {loc.radius} m radius</p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="px-2.5 py-1 bg-blue-50 text-blue-600 text-[9px] font-black uppercase rounded-lg">Trusted Hub</span>
-                      <button
-                         onClick={(e) => {
-                           e.stopPropagation();
-                           setTrustedLocations(prev => prev.filter(l => l.id !== loc.id));
-                         }}
-                         className="p-1.5 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-lg transition-colors"
-                         title="Remove Safe Hub"
-                      >
-                         <Trash2 className="w-4 h-4" />
-                      </button>
-                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                    </div>
+                    </button>
+                    <button type="button" disabled={hubBusy} onClick={() => changeHub(loc.id)} aria-label={`Remove safe hub ${loc.name}`}
+                      className="p-2 hover:bg-red-50 text-slate-500 hover:text-red-600 rounded-lg transition-colors">
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    </button>
                   </div>
                 ))}
+                {filteredFamilyZones.map(zone => <button key={zone.id} type="button" onClick={() => focusZone(zone)}
+                  className="p-4 w-full flex items-center gap-3 text-left rounded-3xl border border-emerald-100 bg-emerald-50/30">
+                  <MapPin className="w-5 h-5 shrink-0 text-emerald-600" aria-hidden="true" />
+                  <span className="min-w-0 break-words"><span className="block font-bold text-slate-800">{zone.name}</span>
+                    <span className="block text-xs text-slate-500">{zone.seniorName} · Family safe zone · {zone.radius} m radius</span></span>
+                </button>)}
               </div>
-              <div className="p-4 bg-slate-50/50 text-[10px] text-slate-400 font-medium px-8">Showing {filteredHubs.length + Number(mainZoneMatches)} zones</div>
+              <div className="p-4 bg-slate-50/50 text-[10px] text-slate-400 font-medium px-8">Showing {filteredHubs.length + filteredFamilyZones.length + Number(mainZoneMatches)} zones</div>
             </div>
             <div className="col-span-3 relative rounded-[2.5rem] overflow-hidden border border-white shadow-[0_8px_30px_rgb(0,0,0,0.06)] bg-white h-[500px]">
-              <MapViewport label="Geofence Zones map" className="h-full" bounds={sanIsidroEastGeofence} variant={geofenceMapStyle} onVariantChange={setGeofenceMapStyle}
+              <MapViewport label="Geofence Zones map" className="h-full" bounds={coverageBounds} variant={geofenceMapStyle} onVariantChange={setGeofenceMapStyle}
                 footer={isPickingLocation && <form className="admin-hub-picker" onSubmit={event => {
                   event.preventDefault();
                   event.currentTarget.closest('dialog')?.close();
@@ -1200,20 +1215,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <PolygonWithLegend positions={sanIsidroEastGeofence} name="San Isidro East" />
                 <LocationPicker />
 
-                {/* Show all saved trusted locations */}
-                {trustedLocations.map(loc => (
-                  <React.Fragment key={loc.id}>
-                    <Marker position={[loc.lat, loc.lng]} icon={createCustomIcon(loc.name, 'trusted')} />
-                    <Circle
-                      center={[loc.lat, loc.lng]}
-                      radius={loc.radius}
-                      pathOptions={{ color: '#4a7c59', fillColor: '#4a7c59', fillOpacity: 0.15, weight: 2, dashArray: '5, 10' }}
-                    />
-                  </React.Fragment>
-                ))}
+                <FamilyZoneLayers zones={familyZones}/>
+                <TrustedHubLayers hubs={trustedLocations}/>
 
                 {/* Show current picking preview */}
-                {newLocation.lat && newLocation.lng && (
+                {(isPickingLocation || isAddingLocationDetails) && newLocation.lat && newLocation.lng && (
                   <>
                     <Marker position={[Number(newLocation.lat), Number(newLocation.lng)]} icon={createCustomIcon('', 'trusted')} />
                     <Circle
@@ -1382,14 +1388,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 <h3 className="text-lg font-bold tracking-tight">Name Your Safe Hub</h3>
                 <p className="text-blue-100 text-[9px] font-bold mt-0.5 uppercase tracking-widest">Finalize safe zone details.</p>
               </div>
-              <button type="button" aria-label="Close safe hub details" onClick={() => setIsAddingLocationDetails(false)} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-all relative z-10">
+              <button type="button" disabled={hubBusy} aria-label="Close safe hub details" onClick={() => { setIsAddingLocationDetails(false); setHubActionError(''); }} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center hover:bg-white/20 transition-all relative z-10">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-7 space-y-6">
               <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Location Name</label>
+                <label htmlFor="safe-hub-name" className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Location Name</label>
                 <input
+                  id="safe-hub-name" maxLength={80} disabled={hubBusy}
                   type="text"
                   placeholder="e.g. Relative's House"
                   value={newLocation.name}
@@ -1415,6 +1422,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </div>
                 <input
                   type="range"
+                  aria-label="Safe hub radius" disabled={hubBusy}
                   min="10"
                   max="200"
                   step="5"
@@ -1429,11 +1437,13 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
                 </div>
               </div>
 
-              <button
-                onClick={handleSaveLocation}
+              <p className="text-xs text-slate-500">This hub is shared with linked families and adds coverage for watches using the default boundary.</p>
+              {hubActionError && <p role="alert" className="text-sm text-red-700">{hubActionError}</p>}
+              <button type="button" disabled={hubBusy}
+                onClick={() => changeHub()}
                 className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 mt-2"
               >
-                <Plus className="w-3 h-3" /> Save Trusted Place
+                <Plus className="w-3 h-3" /> {hubBusy ? 'Saving…' : 'Save Trusted Place'}
               </button>
             </div>
           </div>

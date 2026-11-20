@@ -5,6 +5,8 @@ import MapViewport from '../../../shared/components/MapViewport.jsx';
 import SeniorMapMarker from '../../../shared/components/SeniorMapMarker.jsx';
 import SeniorPhoto from '../../../shared/components/SeniorPhoto.jsx';
 import { familyZoneBounds, familyZoneContains } from '../../../shared/familySafeZone.js';
+import TrustedHubLayers from '../../../shared/components/TrustedHubLayers.jsx';
+import { trustedHubAt } from '../../../shared/trustedHubs.js';
 import { gpsObservation, loadLastGpsObservation, retainGpsObservation } from '../../../shared/gpsLocation.js';
 import { incidentTime } from '../../../shared/sosLocation.js';
 import { sosTransferLabel } from '../../../shared/sosResponse.js';
@@ -43,7 +45,7 @@ function FitResponseMap({ bounds, fitKey }) {
   return null;
 }
 
-function IncidentMap({ client, incident, senior, now, variant, onVariantChange }) {
+function IncidentMap({ client, incident, senior, now, variant, onVariantChange, trustedHubs }) {
   const [gps, setGps] = useState({ observation: null, error: '', loading: true });
   const [revision, setRevision] = useState(0);
   const refreshAt = senior?.positionAt;
@@ -62,7 +64,8 @@ function IncidentMap({ client, incident, senior, now, variant, onVariantChange }
   const points = [sos, latest].filter(Boolean).map(item => [item.point.lat, item.point.lng]);
   const bounds = [...boundary, ...points];
   const visibleBounds = bounds.length ? bounds : SAN_ISIDRO_EAST_BOUNDARY;
-  const outside = latest && !geofence.unavailable && !familyZoneContains(latest.point, geofence.zone);
+  const hub = latest && !geofence.unavailable ? trustedHubAt(latest.point, geofence.zone, trustedHubs) : null;
+  const outside = latest && !geofence.unavailable && !hub && !familyZoneContains(latest.point, geofence.zone);
   const latestTitle = live ? 'Current watch location' : 'Last reported location';
   const samePoint = sos && latest && Math.abs(sos.point.lat - latest.point.lat) < .000001 && Math.abs(sos.point.lng - latest.point.lng) < .000001;
   return <>
@@ -72,11 +75,12 @@ function IncidentMap({ client, incident, senior, now, variant, onVariantChange }
       legend={<div className="sos-response-map__legend"><span><i className="is-sos"/>Saved SOS pin</span><span><i className={live ? 'is-live' : 'is-last'}/>{live ? 'Current watch location' : 'Last reported location'}</span><span><i className="is-zone"/>Assigned geofence</span></div>}>
         <FitResponseMap bounds={visibleBounds} fitKey={`${incident.id}:${geofence.name}`}/>
         {!geofence.unavailable && (geofence.zone ? <Circle center={[geofence.zone.lat, geofence.zone.lng]} radius={geofence.zone.radius} pathOptions={{ color: '#079b70', fillColor: '#34c997', fillOpacity: .17, weight: 3 }}><Popup>{geofence.name} · {geofence.zone.radius} m assigned geofence</Popup></Circle> : <Polygon positions={SAN_ISIDRO_EAST_BOUNDARY} pathOptions={{ color: '#079b70', fillColor: '#34c997', fillOpacity: .14, weight: 3 }}><Popup>San Isidro East · Default barangay boundary</Popup></Polygon>)}
+        <TrustedHubLayers hubs={trustedHubs}/>
         {sos && <SeniorMapMarker deviceId={incident.device_id} position={[sos.point.lat, sos.point.lng]} kind={samePoint ? live ? 'sos-live' : 'sos-last' : 'sos'} title={`${samePoint ? 'Saved SOS and latest watch location' : 'Saved SOS location'} for ${name}`}><Popup><strong>Saved SOS location · {name}</strong><p>{coordinates(sos.point)}</p><p>Recorded {incidentTime(sos.observedAt)}</p>{samePoint && <p>{latestTitle} recorded {incidentTime(latest.observedAt)} at this same point.</p>}<small>This pin stays at the incident location.</small></Popup></SeniorMapMarker>}
         {latest && !samePoint && <SeniorMapMarker deviceId={incident.device_id} position={[latest.point.lat, latest.point.lng]} kind={live ? 'live' : 'last'} title={`${latestTitle} for ${name}`}><Popup><strong>{latestTitle} · {name}</strong><p>{coordinates(latest.point)}</p><p>Recorded {incidentTime(latest.observedAt)}</p></Popup></SeniorMapMarker>}
     </MapViewport>
     <div className="sos-response-map__facts">
-      <div><span className="sos-response-map__fact-label"><MapPin aria-hidden="true"/>{latestTitle}</span><strong>{latest ? coordinates(latest.point) : gps.loading ? 'Loading watch location…' : 'No valid watch location available.'}</strong>{latest && <small>Recorded {incidentTime(latest.observedAt)}</small>}{latest && <em className={outside ? 'is-outside' : 'is-inside'}>{geofence.unavailable ? 'Geofence status unavailable' : `${outside ? 'Outside' : 'Inside'} assigned geofence`}{!live && ' · Last reported fix'}</em>}</div>
+      <div><span className="sos-response-map__fact-label"><MapPin aria-hidden="true"/>{latestTitle}</span><strong>{latest ? coordinates(latest.point) : gps.loading ? 'Loading watch location…' : 'No valid watch location available.'}</strong>{latest && <small>Recorded {incidentTime(latest.observedAt)}</small>}{latest && <em className={outside ? 'is-outside' : 'is-inside'}>{geofence.unavailable ? 'Geofence status unavailable' : hub ? `At trusted hub · ${hub.name}` : `${outside ? 'Outside' : 'Inside'} assigned geofence`}{!live && ' · Last reported fix'}</em>}</div>
       <div><span className="sos-response-map__fact-label"><Clock aria-hidden="true"/>Saved SOS location</span><strong>{sos ? coordinates(sos.point) : 'Location unavailable at the time of SOS.'}</strong>{sos && <small>Recorded {incidentTime(sos.observedAt)}</small>}<small>Incident {incidentTime(incident.details?.sos_location?.incident_at || incident.details?.first_seen_at || incident.created_at)}</small></div>
     </div>
     {(gps.error || geofence.unavailable) && <div role="status" className="sos-response-map__notice"><Info aria-hidden="true"/><span>{gps.error || 'The assigned geofence is unavailable.'} Available saved locations are still shown.</span>{gps.error && <button type="button" onClick={() => setRevision(value => value + 1)}>Retry location</button>}</div>}
@@ -84,7 +88,7 @@ function IncidentMap({ client, incident, senior, now, variant, onVariantChange }
   </>;
 }
 
-export default function SosResponseMap({ client, seniors, active, responses, selected, onSelect, onDetails, onConfirm, busy, now }) {
+export default function SosResponseMap({ client, seniors, active, responses, selected, onSelect, onDetails, onConfirm, busy, now, trustedHubs }) {
   const [tab, setTab] = useState('active');
   const [variant, setVariant] = useState('standard');
   const records = useMemo(() => responseMapIncidents(active, responses, selected), [active, responses, selected]);
@@ -104,7 +108,7 @@ export default function SosResponseMap({ client, seniors, active, responses, sel
         <div className="sos-response-workspace__list">{rows.map(row => <button type="button" key={row.id} aria-pressed={String(row.id) === String(incident?.id)} aria-label={`Select SOS ${row.id} for ${nameOf(row, seniors)}, Watch ID ${row.device_id}`} onClick={() => onSelect(row)}><SeniorPhoto deviceId={row.device_id}/><span><strong>{nameOf(row, seniors)}</strong><small>Watch ID: {row.device_id}</small><small>SOS · {incidentTime(row.created_at)}</small>{sosTransferLabel(row) && <small>{sosTransferLabel(row)}</small>}<em>{isAcknowledgedSos(row) ? 'Acknowledged' : isPendingSos(row) ? 'Awaiting response' : 'Incident history'}</em></span></button>)}{!rows.length && <p className="sos-response-workspace__empty">{selectedTab === 'active' ? 'No active SOS incidents.' : 'No acknowledged SOS incidents yet.'}</p>}</div>
         {incident && <><div className="sos-response-workspace__identity"><ShieldCheck aria-hidden="true"/><div><strong>{responseMapZone(senior).name}</strong><p>{senior?.safeZone?.radius ? `${senior.safeZone.radius} m assigned geofence` : senior ? 'Default barangay boundary' : 'Senior record unavailable'}</p></div></div><button type="button" className="sos-response-workspace__details" onClick={() => onDetails(incident)}><History aria-hidden="true"/>View incident details</button>{isPendingSos(incident) && <button type="button" data-confirm-alert className="sos-response-workspace__confirm" disabled={busy} onClick={() => onConfirm(incident)}>{busy ? 'Saving response…' : 'Confirm response & open map'}</button>}</>}
       </aside>
-      <div className="sos-response-map">{incident ? <IncidentMap key={incident.device_id} client={client} incident={incident} senior={senior} now={now} variant={variant} onVariantChange={setVariant}/> : <div className="sos-response-map__empty"><MapPin aria-hidden="true"/><h2>Select an SOS incident</h2><p>Its saved location, latest watch location and assigned geofence will appear here.</p></div>}</div>
+      <div className="sos-response-map">{incident ? <IncidentMap key={incident.device_id} client={client} incident={incident} senior={senior} now={now} variant={variant} onVariantChange={setVariant} trustedHubs={trustedHubs}/> : <div className="sos-response-map__empty"><MapPin aria-hidden="true"/><h2>Select an SOS incident</h2><p>Its saved location, latest watch location and assigned geofence will appear here.</p></div>}</div>
     </div>
   </section>;
 }
