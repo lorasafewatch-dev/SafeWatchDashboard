@@ -9,7 +9,7 @@ import TrustedHubLayers from '../../../shared/components/TrustedHubLayers.jsx';
 import { safeLocationAt, safeLocationsForWatch } from '../../../shared/trustedHubs.js';
 import { gpsObservation, loadLastGpsObservation, retainGpsObservation } from '../../../shared/gpsLocation.js';
 import { incidentTime } from '../../../shared/sosLocation.js';
-import { sosTransferLabel } from '../../../shared/sosResponse.js';
+import { barangaySosStage, sosResponseState, sosTransferLabel } from '../../../shared/sosResponse.js';
 import { SAN_ISIDRO_EAST_BOUNDARY } from '../../../shared/safeZone.js';
 import { withRequestTimeout } from '../../../shared/requestTimeout.js';
 import { isAcknowledgedSos, isPendingSos, responseMapIncidents, responseMapPositions, responseMapZone } from '../sosResponseMap.js';
@@ -17,6 +17,7 @@ import './SosResponseMap.css';
 
 const coordinates = point => `${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`;
 const fitOptions = { padding: [32, 32], maxZoom: 17, animate: false };
+const barangayStageLabels = { on_the_way: 'On the way', arrived: 'Arrived' };
 const nameOf = (incident, seniors) => seniors.find(senior => senior.id === incident.device_id)?.name || incident.devices?.patient_name || incident.seniorName || 'Senior';
 
 function FitResponseMap({ bounds, fitKey }) {
@@ -91,7 +92,7 @@ function IncidentMap({ client, incident, senior, now, variant, onVariantChange, 
   </>;
 }
 
-export default function SosResponseMap({ client, seniors, active, responses, selected, onSelect, onDetails, onConfirm, busy, now, trustedHubs }) {
+export default function SosResponseMap({ client, seniors, active, responses, selected, onSelect, onDetails, onConfirm, onArrive, busy, now, trustedHubs }) {
   const [tab, setTab] = useState('active');
   const [variant, setVariant] = useState('standard');
   const records = useMemo(() => responseMapIncidents(active, responses, selected), [active, responses, selected]);
@@ -103,13 +104,16 @@ export default function SosResponseMap({ client, seniors, active, responses, sel
   const senior = seniors.find(row => row.id === incident?.device_id);
   const acknowledged = isAcknowledgedSos(incident);
   const acknowledgedAt = incident?.details?.acknowledged_at || incident?.details?.sos_responses?.barangay?.at || incident?.details?.sos_responses?.family?.at;
+  const stage = barangaySosStage(incident);
+  const responseTime = incident?.details?.sos_arrived_at || acknowledgedAt;
   const selectTab = next => { setTab(next); onSelect(records.find(row => next === 'active' ? isPendingSos(row) : !isPendingSos(row)) || null); };
   return <section className="sos-response-workspace" aria-label="SOS response workspace">
-    {acknowledged && <div role="status" className="sos-response-workspace__success"><span><Check aria-hidden="true"/></span><div><strong>SOS response acknowledged</strong><p>{incident.details.status === 'ACKNOWLEDGED_BHW' ? 'Barangay response saved' : 'Family response saved'}{acknowledgedAt && ` · ${incidentTime(acknowledgedAt)}`}</p></div></div>}
+    {acknowledged && <div role="status" className="sos-response-workspace__success"><span><Check aria-hidden="true"/></span><div><strong>{stage === 'arrived' ? 'Arrival saved' : 'SOS response acknowledged'}</strong><p>{sosResponseState(incident).message}{responseTime && ` · ${incidentTime(responseTime)}`}</p></div></div>}
     <div className="sos-response-workspace__layout">
       <aside className="sos-response-workspace__incidents"><h2>SOS incidents</h2><div className="sos-response-workspace__tabs" role="group" aria-label="SOS incident status"><button type="button" aria-pressed={selectedTab === 'active'} onClick={() => selectTab('active')}>Active</button><button type="button" aria-pressed={selectedTab === 'acknowledged'} onClick={() => selectTab('acknowledged')}>Acknowledged & history</button></div>
-        <div className="sos-response-workspace__list">{rows.map(row => <button type="button" key={row.id} aria-pressed={String(row.id) === String(incident?.id)} aria-label={`Select SOS ${row.id} for ${nameOf(row, seniors)}, Watch ID ${row.device_id}`} onClick={() => onSelect(row)}><SeniorPhoto deviceId={row.device_id}/><span><strong>{nameOf(row, seniors)}</strong><small>Watch ID: {row.device_id}</small><small>SOS · {incidentTime(row.created_at)}</small>{sosTransferLabel(row) && <small>{sosTransferLabel(row)}</small>}<em>{isAcknowledgedSos(row) ? 'Acknowledged' : isPendingSos(row) ? 'Awaiting response' : 'Incident history'}</em></span></button>)}{!rows.length && <p className="sos-response-workspace__empty">{selectedTab === 'active' ? 'No active SOS incidents.' : 'No acknowledged SOS incidents yet.'}</p>}</div>
+        <div className="sos-response-workspace__list">{rows.map(row => <button type="button" key={row.id} aria-pressed={String(row.id) === String(incident?.id)} aria-label={`Select SOS ${row.id} for ${nameOf(row, seniors)}, Watch ID ${row.device_id}`} onClick={() => onSelect(row)}><SeniorPhoto deviceId={row.device_id}/><span><strong>{nameOf(row, seniors)}</strong><small>Watch ID: {row.device_id}</small><small>SOS · {incidentTime(row.created_at)}</small>{sosTransferLabel(row) && <small>{sosTransferLabel(row)}</small>}<em>{barangayStageLabels[barangaySosStage(row)] || (isAcknowledgedSos(row) ? 'Acknowledged' : isPendingSos(row) ? 'Awaiting response' : 'Incident history')}</em></span></button>)}{!rows.length && <p className="sos-response-workspace__empty">{selectedTab === 'active' ? 'No active SOS incidents.' : 'No acknowledged SOS incidents yet.'}</p>}</div>
         {incident && <><div className="sos-response-workspace__identity"><ShieldCheck aria-hidden="true"/><div><strong>{responseMapZone(senior).name}</strong><p>{senior?.safeZone?.radius ? `${senior.safeZone.radius} m assigned geofence` : senior ? 'Default barangay boundary' : 'Senior record unavailable'}</p></div></div><button type="button" className="sos-response-workspace__details" onClick={() => onDetails(incident)}><History aria-hidden="true"/>View incident details</button>{isPendingSos(incident) && <button type="button" data-confirm-alert className="sos-response-workspace__confirm" disabled={busy} onClick={() => onConfirm(incident)}>{busy ? 'Saving response…' : 'Confirm response & open map'}</button>}</>}
+        {stage === 'on_the_way' && <button type="button" data-confirm-alert className="sos-response-workspace__confirm" disabled={busy} onClick={() => onArrive(incident)}>{busy ? 'Saving arrival…' : 'Mark as arrived'}</button>}
       </aside>
       <div className="sos-response-map">{incident ? <IncidentMap key={incident.device_id} client={client} incident={incident} senior={senior} now={now} variant={variant} onVariantChange={setVariant} trustedHubs={trustedHubs}/> : <div className="sos-response-map__empty"><MapPin aria-hidden="true"/><h2>Select an SOS incident</h2><p>Its saved location, latest watch location and assigned geofence will appear here.</p></div>}</div>
     </div>

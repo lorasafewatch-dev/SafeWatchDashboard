@@ -2,6 +2,13 @@ export function isFamilyActionable(incident) {
   return incident.alert_type !== 'SOS' || incident.details?.sos_assigned_to !== 'barangay';
 }
 
+export function barangaySosStage(incident) {
+  if (incident?.alert_type !== 'SOS' || incident.details?.status !== 'ACKNOWLEDGED_BHW') return null;
+  const details = incident.details;
+  if (details.sos_arrived_at) return 'arrived';
+  return details.sos_responses?.barangay?.at || details.acknowledged_at || details.sos_response_at ? 'on_the_way' : null;
+}
+
 export function sosResponseState(incident) {
   const details = incident?.details || {};
   const responses = { ...details.sos_responses };
@@ -13,7 +20,10 @@ export function sosResponseState(incident) {
   const transferred = !!details.sos_transferred_at;
   const waitingForFamily = details.sos_family_first === true && !transferred && !confirmed
     && details.incident_open !== false && ['PENDING_FAMILY','ESCALATED_BHW'].includes(details.status || 'PENDING_FAMILY');
-  const message = confirmed ? details.status === 'ACKNOWLEDGED_FAMILY' ? 'Family confirmed the response' : 'Barangay secretary confirmed the response'
+  const stage = barangaySosStage(incident);
+  const message = stage === 'arrived' ? 'Barangay personnel have arrived'
+    : stage === 'on_the_way' ? 'Barangay personnel are on the way'
+    : confirmed ? details.status === 'ACKNOWLEDGED_FAMILY' ? 'Family confirmed the response' : 'Barangay secretary confirmed the response'
     : waitingForFamily ? 'Waiting for family response'
     : assigned === 'both' ? 'Both sides declined. SOS still needs a response.'
     : assigned === 'barangay' && details.sos_transfer_reason === 'automatic_timeout' ? 'No family response after 3 minutes. Barangay notified.'
@@ -35,6 +45,19 @@ export async function respondToSos(client, incident, decision, role = 'family') 
   if (incident?.alert_type !== 'SOS' || !['confirmed','declined'].includes(decision) || !['family','barangay'].includes(role)) throw new Error('Invalid SOS response');
   const { data, error } = await client.rpc('respond_to_sos', { p_alert_id: incident.id, p_decision: decision, p_role: role });
   if (error) throw error;
+  return savedSos(incident, data);
+}
+
+export async function markSosArrived(client, incident) {
+  if (!barangaySosStage(incident)) throw new Error('Barangay must accept this SOS before reporting arrival.');
+  const { data, error } = await client.rpc('mark_sos_arrived', { p_alert_id: incident.id });
+  if (error) throw error;
+  const saved = savedSos(incident, data);
+  if (barangaySosStage(saved) !== 'arrived') throw new Error('Arrival was not saved.');
+  return saved;
+}
+
+function savedSos(incident, data) {
   if (data?.saved !== true || String(data.alert?.id) !== String(incident.id)
     || data.alert?.alert_type !== 'SOS' || data.alert?.device_id !== incident.device_id) throw new Error('This SOS changed. Refresh and try again.');
   return { ...data.alert, devices: incident.devices };

@@ -4,17 +4,16 @@ Apply `supabase/migrations/20261103_sos_response_handoff.sql` after
 `20261103_battery_location_history.sql`, then deploy both apps. This additive
 migration preserves existing incidents, confirmations, devices and family links.
 
-The family app's SOS popup and Alerts page offer **Confirm response** and
-**Can’t respond — notify barangay**. This immediately notifies the barangay
-secretary or admin. A saved family decline displays **Barangay already notified**.
-The secretary can confirm or choose
+The family app's SOS popup and Alerts page offer **I can respond** and
+**Transfer SOS to barangay**. The secretary can confirm or choose
 **Decline — notify family** in the dashboard overview, Alerts page and alert details.
 Decline means the person cannot respond; it is not dismissal or cancellation.
 
 | Action | Result visible to both sides |
 | --- | --- |
 | Family declines | SOS immediately needs the barangay secretary's attention, without waiting three minutes. |
-| Secretary confirms | Family sees **Barangay secretary confirmed the response** with the time. |
+| Barangay confirms an SOS | Family sees **Barangay personnel are on the way** with the time. |
+| Barangay selects **Mark as arrived** | Family sees **Barangay personnel have arrived** with the arrival time. |
 | Secretary declines | Family receives an actionable SOS and sees that the secretary declined. |
 | Family confirms | Secretary sees **Family confirmed the response** with the time. |
 | Both decline | SOS remains actionable for both; the indicator says both declined and a response is still needed. |
@@ -30,7 +29,10 @@ Realtime updates and the existing polling refresh synchronize both apps. When
 Realtime is unavailable, family updates normally refresh within five seconds and
 staff updates within ten seconds, subject to connectivity. In-app sounds announce
 a new handoff once when browser audio is enabled; repeated watch packets do not
-repeat that initial notification. This feature does not send SMS, email or OS push.
+repeat that initial notification. Barangay acceptance and arrival each appear in
+a banner at the top of the Family app and as an unread update in the notification
+bell. Family devices with SOS notifications enabled receive background pushes.
+See [Family SOS background notifications](https://github.com/lorasafewatch-dev/SafeWatch-Family-App/blob/main/docs/sos-background-notifications.md).
 The response-history query runs separately so its failure cannot delay pending SOS
 notifications. Failed response writes display an error and keep the alert active.
 

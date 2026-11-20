@@ -6,7 +6,7 @@ import { ALERT_QUERY_FILTER, acknowledgeIncident, alertTitle, batteryAlertMessag
 import LocationHistory from '../../shared/components/LocationHistory.jsx';
 import NotificationBell from '../../shared/components/NotificationBell.jsx';
 import SosResponseUpdates, { SosResponseIndicator } from '../../shared/components/SosResponseStatus.jsx';
-import { loadSosResponses, mergeSosResponse, respondToSos, sosResponseError, sosResponseState } from '../../shared/sosResponse.js';
+import { barangaySosStage, loadSosResponses, markSosArrived, mergeSosResponse, respondToSos, sosResponseError, sosResponseState } from '../../shared/sosResponse.js';
 import { withRequestTimeout } from '../../shared/requestTimeout.js';
 import { enableAlertSounds, playAlertSound, stopAlertSounds } from '../../shared/alertSound.js';
 import { SAN_ISIDRO_EAST_BOUNDARY } from '../../shared/safeZone.js';
@@ -451,6 +451,11 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
       if (request !== sosResponsesRequest.current) return;
       setSosResponses(rows); setSosResponsesError('');
       setResponseIncident(current => rows.find(row => String(row.id) === String(current?.id)) || current);
+      setSelectedAlert(current => {
+        if (!current || current.details?.sos_arrived_at) return current;
+        const receipt = rows.find(row => String(row.id) === String(current.id));
+        return receipt?.details?.sos_arrived_at ? { ...current, details: receipt.details } : current;
+      });
     } catch (error) {
       if (request !== sosResponsesRequest.current) return;
       setSosResponsesError(['PGRST202','42883'].includes(error.code) ? 'SOS response updates need the SafeWatch database update.' : 'SOS response updates could not be refreshed. Retry to see the latest decisions.');
@@ -593,12 +598,21 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     sosResponsesBusy.current = false;
     pendingAlertTone.current = null;
     stopAlertSounds();
+    const reportingArrival = decision === 'arrived';
     try {
-      const updated = await respondToSos(supabase, incident, decision, 'barangay');
+      const updated = reportingArrival ? await markSosArrived(supabase, incident)
+        : await respondToSos(supabase, incident, decision, 'barangay');
       setSosResponses(current => mergeSosResponse(current, updated));
-      commitConfirmation(incident);
-      if (decision === 'confirmed') openResponseMap(updated);
-    } catch (error) { setAlertActionError(sosResponseError(error)); }
+      if (reportingArrival) {
+        setResponseIncident(current => String(current?.id) === String(updated.id) ? updated : current);
+        setSelectedAlert(current => String(current?.id) === String(updated.id) ? { ...current, details: updated.details } : current);
+      } else {
+        commitConfirmation(incident);
+        if (decision === 'confirmed') openResponseMap(updated);
+      }
+    } catch (error) {
+      setAlertActionError(reportingArrival ? 'Arrival could not be saved. Refresh the SOS and try again.' : sosResponseError(error));
+    }
     finally {
       confirmationBusy.current = false;
       setConfirmingAlerts(false);
@@ -727,12 +741,15 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
 
   if (!isLoggedIn) return <AuthEntry client={supabase} app='dashboard' initialError={authLinkError} notice={authNotice} onRecovered={retryAuth} />;
 
-  const openAlertDetails = incident => setSelectedAlert({ ...incident,
-    historyView: !sosAlerts.some(row => String(row.id) === String(incident.id)),
-    seniorName: incident.seniorName || incident.devices?.patient_name || 'Senior',
-    deviceId: incident.device_id, rawType: incident.alert_type, rawDetails: incident.details || {},
-    fullTime: new Date(incident.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }),
-  });
+  const openAlertDetails = incident => {
+    setAlertActionError('');
+    setSelectedAlert({ ...incident,
+      historyView: !sosAlerts.some(row => String(row.id) === String(incident.id)),
+      seniorName: incident.seniorName || incident.devices?.patient_name || 'Senior',
+      deviceId: incident.device_id, rawType: incident.alert_type, rawDetails: incident.details || {},
+      fullTime: new Date(incident.created_at).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }),
+    });
+  };
   const selectedAlertPending = selectedAlert && selectedAlert.details?.incident_open !== false && ['PENDING_FAMILY', 'ESCALATED_BHW'].includes(selectedAlert.details?.status || 'PENDING_FAMILY');
 
   const renderContent = () => {
@@ -1025,8 +1042,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
     } else if (activeTab === 'SOS Alerts') {
       return (
         <div className="admin-page admin-alerts">
-          <div className="admin-alert-intro"><p>Confirm a response, or decline an SOS to notify the family.</p><button data-confirm-alert disabled={confirmingAlerts || !visibleAlerts.length} onClick={handleDismissAllDB} className="btn-outline">Confirm all responses</button></div>
-          <SosResponseMap client={supabase} seniors={seniors} active={sosAlerts} responses={sosResponses} selected={responseIncident} onSelect={setResponseIncident} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} busy={confirmingAlerts} now={liveTime.getTime()} trustedHubs={trustedLocations}/>
+          <div className="admin-alert-intro"><p>Confirm a response to tell the family personnel are on the way. Mark the SOS as arrived once personnel reach the senior.</p><button data-confirm-alert disabled={confirmingAlerts || !visibleAlerts.length} onClick={handleDismissAllDB} className="btn-outline">Confirm all responses</button></div>
+          <SosResponseMap client={supabase} seniors={seniors} active={sosAlerts} responses={sosResponses} selected={responseIncident} onSelect={setResponseIncident} onDetails={openAlertDetails} onConfirm={handleDismissAlertDB} onArrive={incident => handleSosResponse(incident, 'arrived')} busy={confirmingAlerts} now={liveTime.getTime()} trustedHubs={trustedLocations}/>
           {/* Alert Summary Card */}
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6 w-fit">
             <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
@@ -1268,7 +1285,7 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
           </div>
         </header>
         <div ref={contentRef} className="admin-content" data-page={activeTab}>
-          {alertActionError && <p role="alert" className="bg-red-50 text-red-700 rounded-xl p-4 mb-4">{alertActionError}</p>}
+          {alertActionError && !selectedAlert && <p role="alert" className="bg-red-50 text-red-700 rounded-xl p-4 mb-4">{alertActionError}</p>}
           {seniorMessage && <p role="status" className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{seniorMessage}</p>}
           {renderContent()}
           {activeTab === 'SOS Alerts' && <><SosResponseUpdates responses={sosResponses} error={sosResponsesError} onRetry={fetchSosResponseUpdates} onDetails={openAlertDetails}/><ActivityHistory key={userId} client={supabase} seniors={seniors} onDetails={openAlertDetails}/></>}
@@ -1488,6 +1505,8 @@ function App({ client, verifyCurrentPassword = verifyDashboardPassword } = {}) {
               <SosLocation incident={selectedAlert}/>
               {selectedAlert.alert_type === 'SOS' && <button type="button" onClick={() => openResponseMap(selectedAlert)} className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 font-semibold text-emerald-800">View response map</button>}
               <SosResponseIndicator incident={selectedAlert}/>
+              {barangaySosStage(selectedAlert) === 'on_the_way' && <button type="button" data-confirm-alert disabled={confirmingAlerts} onClick={() => handleSosResponse(selectedAlert, 'arrived')} className="w-full rounded-xl bg-emerald-700 px-4 py-3 font-semibold text-white disabled:opacity-60">{confirmingAlerts ? 'Saving arrival…' : 'Mark as arrived'}</button>}
+              {alertActionError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{alertActionError}</p>}
               {selectedAlertPending && selectedAlert.alert_type === 'SOS' && <button data-confirm-alert disabled={confirmingAlerts || sosResponseState(selectedAlert).responses.barangay?.decision === 'declined'} onClick={() => handleSosResponse(selectedAlert, 'declined')} className="sos-decline-button w-full">Decline — notify family</button>}
             </div>
           </div>

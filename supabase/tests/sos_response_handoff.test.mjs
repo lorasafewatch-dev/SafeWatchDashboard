@@ -80,11 +80,11 @@ try {
   assert.equal(accepted.details.status,'ACKNOWLEDGED_BHW');
   assert.equal(accepted.details.sos_responses.family.decision,'declined');
   assert.equal(accepted.details.sos_responses.barangay.decision,'confirmed');
-  assert.match(sosResponseState((await feed())[0]).message,/Barangay secretary confirmed/);
+  assert.match(sosResponseState((await feed())[0]).message,/Barangay personnel are on the way/);
   const familyBell=buildBellNotifications([],await apiFeed(family),family);
   assert.equal(familyBell.length,1);
   assert.equal(unreadNotifications(familyBell).length,1);
-  assert.match(familyBell[0].title,/Barangay secretary confirmed/);
+  assert.match(familyBell[0].title,/Barangay personnel are on the way/);
   assert.equal(familyBell[0].active,false);
   assert.equal(unreadNotifications(buildBellNotifications([],await apiFeed(staff),staff)).length,0,'Own response is visible without an unread badge');
   await packet(); assert.equal((await watchSos()).details.status,'ACKNOWLEDGED_BHW');

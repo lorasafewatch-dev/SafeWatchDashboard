@@ -1,4 +1,4 @@
-import { sosResponseState, sosTransferLabel } from '../sosResponse.js';
+import { barangaySosStage, sosResponseState, sosTransferLabel } from '../sosResponse.js';
 import './SosResponseStatus.css';
 
 const formatTime = value => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString('en-PH', {
@@ -16,6 +16,10 @@ export function SosResponseIndicator({ incident }) {
       <strong>{role === 'family' ? 'Family' : 'Barangay secretary'}: {responses[role].decision === 'confirmed' ? 'Confirmed' : role === 'family' && transferred ? 'Transferred to barangay' : 'Declined'}</strong>
       {responses[role].at && <time dateTime={responses[role].at}>{formatTime(responses[role].at)} PHT</time>}
     </p>)}
+    {barangaySosStage(incident) === 'arrived' && <p className="sos-response-status__receipt">
+      <strong>Barangay arrival reported</strong>
+      <time dateTime={incident.details.sos_arrived_at}>{formatTime(incident.details.sos_arrived_at)} PHT</time>
+    </p>}
   </div>;
 }
 

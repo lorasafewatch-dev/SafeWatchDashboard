@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { groupAlertIncidents, needsBarangayAttention, planAlertSounds } from './alertLifecycle.js';
-import { isFamilyActionable, loadSosResponses, mergeSosResponse, respondToSos, sosResponseState } from './sosResponse.js';
+import { isFamilyActionable, loadSosResponses, markSosArrived, mergeSosResponse, respondToSos, sosResponseState } from './sosResponse.js';
 
 const now = Date.parse('2026-11-03T04:00:00Z');
 const row = (details = {}) => ({ id: 1, device_id: 'watch-a', alert_type: 'SOS', created_at: new Date(now).toISOString(),
@@ -66,8 +66,21 @@ test('confirmation indicators retain who confirmed and both sides decisions acro
   const state = sosResponseState(JSON.parse(JSON.stringify(incident)));
   assert.equal(state.responses.family.decision, 'declined');
   assert.equal(state.responses.barangay.decision, 'confirmed');
-  assert.match(state.message, /Barangay secretary confirmed/);
+  assert.equal(state.message, 'Barangay personnel are on the way');
   assert.match(sosResponseState(row({ status: 'ACKNOWLEDGED_FAMILY' })).message, /Family confirmed/);
+});
+
+test('arrival requires a saved receipt on the accepted SOS', async () => {
+  const accepted = row({ status: 'ACKNOWLEDGED_BHW', acknowledged_at: new Date(now).toISOString() });
+  const arrived = { ...accepted, details: { ...accepted.details, sos_arrived_at: new Date(now + 1000).toISOString() } };
+  const client = { rpc: async (name, args) => {
+    assert.equal(name, 'mark_sos_arrived');
+    assert.deepEqual(args, { p_alert_id: accepted.id });
+    return { data: { saved: true, alert: arrived } };
+  } };
+  assert.equal(sosResponseState(await markSosArrived(client, accepted)).message, 'Barangay personnel have arrived');
+  await assert.rejects(markSosArrived(client, row()), /must accept/);
+  await assert.rejects(markSosArrived({ rpc: async () => ({ data: { saved: true, alert: accepted } }) }, accepted), /not saved/);
 });
 
 test('response writes validate the saved alert and role instead of treating an unsuccessful RPC as confirmation', async () => {

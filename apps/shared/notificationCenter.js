@@ -29,7 +29,7 @@ export function buildBellNotifications(active = [], responses = [], userId = nul
     const latestDecision = decisions.find(item => item.at && item.at === details.sos_response_at)
       || decisions.sort((a,b) => time(b.at)-time(a.at))[0];
     const confirmer = details.status === 'ACKNOWLEDGED_BHW' ? response.responses.barangay : response.responses.family;
-    const actor = terminal(incident) ? details.acknowledged_by || confirmer?.by || latestDecision?.by : latestDecision?.by;
+    const actor = terminal(incident) ? details.sos_arrived_by || details.acknowledged_by || confirmer?.by || latestDecision?.by : latestDecision?.by;
     const revision = version(incident) ? `response:${version(incident)}`
       : isUpdate ? `confirmation:${details.status}:${at}` : `initial:${details.first_seen_at || incident.created_at}`;
     return { key: `${entity(incident)}:${revision}`, incident, active: needsResponse,

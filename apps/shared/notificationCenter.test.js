@@ -21,9 +21,37 @@ test('family-only SOS cannot enter the staff bell, and a timeout creates one new
 test('bell includes a secretary confirmation when no active alert remains',()=>{
   const notifications=buildBellNotifications([],[receipt()], 'family-user');
   assert.equal(notifications.length,1);
-  assert.match(notifications[0].title,/Barangay secretary confirmed/);
+  assert.equal(notifications[0].title,'Barangay personnel are on the way');
   assert.equal(notifications[0].active,false);
   assert.equal(unreadNotifications(notifications).length,1);
+});
+
+test('a transferred SOS becomes an unread on-the-way notification after staff confirms',()=>{
+  const handoff = { sos_transferred_at: at, sos_transfer_reason: 'family_unavailable' };
+  const transferred = receipt(1, 'family', 'declined');
+  Object.assign(transferred.details, handoff);
+  const confirmed = receipt(2);
+  Object.assign(confirmed.details, handoff);
+  const readKeys = buildBellNotifications([], [transferred], 'family-user').map(item => item.key);
+  const notifications = buildBellNotifications([transferred], [confirmed], 'family-user');
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].title, 'Barangay personnel are on the way');
+  assert.equal(notifications[0].active, false);
+  assert.equal(unreadNotifications(notifications, readKeys).length, 1);
+  assert.notEqual(buildBellNotifications([], [transferred], 'family-user')[0].title, notifications[0].title);
+});
+
+test('arrival is unread after on-the-way was read and uses the arrival time and actor',()=>{
+  const accepted = receipt(2);
+  const read = buildBellNotifications([], [accepted], 'family-user').map(item => item.key);
+  const arrivedAt = '2026-11-03T04:12:00Z';
+  const arrived = { ...accepted, details: { ...accepted.details, sos_response_version: 3, sos_response_at: arrivedAt,
+    sos_arrived_at: arrivedAt, sos_arrived_by: 'second-staff-user' } };
+  const [update] = unreadNotifications(buildBellNotifications([], [arrived], 'family-user'), read);
+  assert.equal(update.title, 'Barangay personnel have arrived');
+  assert.equal(update.at, arrivedAt);
+  assert.equal(buildBellNotifications([], [arrived], 'second-staff-user', [], 'barangay')[0].autoRead, true);
+  assert.equal(buildBellNotifications([], [arrived], 'barangay-user', [], 'barangay')[0].autoRead, false);
 });
 
 test('both reciprocal handoffs and family confirmation appear in the bell',()=>{
@@ -41,7 +69,7 @@ test('active SOS and its response feed merge into one notification',()=>{
 test('a newer saved confirmation replaces an older pending snapshot, regardless of query completion order',()=>{
   const notifications=buildBellNotifications([sos()],[receipt(2)],'family-user');
   assert.equal(notifications.length,1); assert.equal(notifications[0].active,false);
-  assert.match(notifications[0].title,/secretary confirmed/);
+  assert.equal(notifications[0].title,'Barangay personnel are on the way');
   const newer=receipt(3,'barangay','declined');
   assert.equal(buildBellNotifications([newer],[receipt(1,'family','declined')])[0].incident.details.sos_response_version,3);
 });
